@@ -1,0 +1,14 @@
+.coveragerc
+.gitignore
+.travis.yml
+demo.gif
+flow
+.idea/
+bin/
+build/
+cfg/
+ckpt/
+darkflow/
+images/
+test/
+sample_img/
