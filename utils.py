@@ -1,4 +1,5 @@
 import boto3
+import json
 
 DEFAULT_BUCKET = "kuvrr-analytics-test"
 session = boto3.Session(profile_name='agimage')
@@ -48,4 +49,5 @@ def save_data(key, body, content_type, bucket=DEFAULT_BUCKET):
 #'name':'jaison',
 #'game': 'badi'
 #}
-#save_data('test.json',body,'application/json')
+
+#save_data('test.json',json.dumps(body),'application/json')

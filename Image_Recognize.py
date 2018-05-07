@@ -7,18 +7,28 @@ import sys
 import utils
 import json
 import time
+import datetime
+
 
 #%config InlineBackend.figure_format = 'svg'
+if sys.platform == 'win32':
+    print ('Setting windows options')
+    options = {
+        'model': 'cfg/yolo.cfg',
+        'load': 'bin/yolov2.weights',
+        'threshold': 0.3
+    }
+else:
+    print('Setting unix options')
+    options = {
+        'model': 'cfg/yolo.cfg',
+        'load': 'bin/yolov2.weights',
+        'threshold': 0.3,
+        'gpu' : 1
+    }
 
-options = {
-    'model': 'cfg/yolo.cfg',
-    'load': 'bin/yolov2.weights',
-    'threshold': 0.3
-}
 
-
-
-def picture_process(resource,start_time):
+def picture_process_label(resource,start_time):
 
     tfnet = TFNet(options)
     elapsed_time = time.time() - start_time
@@ -27,12 +37,37 @@ def picture_process(resource,start_time):
     img = cv2.imread(resource, cv2.IMREAD_COLOR)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
+
+    # use YOLO to predict the image
+    a = datetime.datetime.now()
+    result = tfnet.return_predict(img)
+    b = datetime.datetime.now()
+    delta = b - a
+    print('Time to predict in milliseconds', int(delta.total_seconds() * 1000))
+
+    for x in range (0,len(result)) :
+        print (result[x])
+
+
+
+def picture_process_display(resource,start_time):
+
+    tfnet = TFNet(options)
+    elapsed_time = time.time() - start_time
+    print('Time to load model',elapsed_time)
+    # read the color image and covert to RGB
+    img = cv2.imread(resource, cv2.IMREAD_COLOR)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # save original picture to show
     img1 = cv2.imread(resource, cv2.IMREAD_COLOR)
     img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
 
     # use YOLO to predict the image
+    a = datetime.datetime.now()
     result = tfnet.return_predict(img)
-    print('Time to predict', time.time() - elapsed_time)
+    b = datetime.datetime.now()
+    delta = b - a
+    print('Time to predict in milliseconds', int(delta.total_seconds() * 1000))
 
     for x in range (0,len(result)) :
         print (result[x])
@@ -44,21 +79,19 @@ def picture_process(resource,start_time):
             tl1 = (result[x]['topleft']['x'], result[x]['topleft']['y'])
         br = (result[x]['bottomright']['x'], result[x]['bottomright']['y'])
         label = result[x]['label']
-        #print ('label,tl,br',label,tl,br)
 
         # add the box and label and display it
-
-
         img = cv2.rectangle(img, tl, br, (0, 255, 0), 17)
         img = cv2.putText(img, label, tl1, cv2.FONT_HERSHEY_DUPLEX, .5, (0, 0, 0), 1)
     #plt.plot(img)
     #plt.show()
     #plt.imshow([img, img1])
-    #plt.subplot(1,2,1);
-    #plt.imshow(img)
-    #plt.subplot(1,2,2);
-    #plt.imshow(img1)
-    #plt.show()
+    plt.subplot(1,2,1);
+    plt.imshow(img)
+    plt.subplot(1,2,2);
+    plt.imshow(img1)
+    plt.show()
+
 
 
 def video_process(resource):
@@ -72,13 +105,22 @@ def video_process(resource):
     # frame number starts from 0 to total_frames - 1
     i = 0
     results = []
+    counter = 0
+    start_time = time.time()
+    x = 1  # displays the frame rate every 1 second
+
     while (capture.isOpened()):
-        stime = time.time()
+
         ret, frame = capture.read()
+        counter += 1
+        if (time.time() - start_time) > x:
+            print("FPS: ", counter / (time.time() - start_time))
+            counter = 0
+            start_time = time.time()
         if ret:
             result = tfnet.return_predict(frame)
             results.append((i,result))
-            print ("Processed frame %s of %s" %(i ,total_frames))
+            #print ("Processed frame %s of %s" %(i ,total_frames))
             i = i + 1
         else:
             capture.release()
@@ -126,7 +168,7 @@ def video_display(resource):
 
 
 def main():
-
+    #TODO need to clean up main function
     if len(sys.argv) == 1:
         print('Default')
     else:
@@ -171,7 +213,7 @@ def main():
         else:
             print ('process picture ', resource)
             #exit()
-            picture_process(resource)
+            picture_process_display(resource)
 
 
 #main()
@@ -180,6 +222,7 @@ def main():
 start_time = time.time()
 # your code
 
-picture_process('./images/Bird.jpg',start_time)
-print('Completed time',time.time() - start_time)
-#video_process('./video/unify1.mp4')
+#picture_process_display('./images/Bird.jpg',start_time)
+#picture_process_label('./images/Bird.jpg',start_time)
+#print('Completed time',time.time() - start_time)
+video_process('./video/unify1.mp4')
