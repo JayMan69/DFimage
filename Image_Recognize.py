@@ -8,7 +8,7 @@ import utils
 import json
 import time
 import datetime
-
+import os
 
 #%config InlineBackend.figure_format = 'svg'
 if sys.platform == 'win32':
@@ -141,7 +141,8 @@ def save_meta_data(client,id,type,resource,results):
     #result = json.dumps(results)
     # fix to convert numpy float to float
     result = json.dumps(results, default=dumper)
-    utils.save_data(resource,result,type)
+    # get filename from the path + filename
+    utils.save_data(os.path.basename(result),result,type)
 
 
 def video_display(resource):
