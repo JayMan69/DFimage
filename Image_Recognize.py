@@ -108,15 +108,17 @@ def video_process(resource):
     counter = 0
     start_time = time.time()
     x = 1  # displays the frame rate every 1 second
-
     while (capture.isOpened()):
 
         ret, frame = capture.read()
         counter += 1
         if (time.time() - start_time) > x:
-            print("FPS: ", counter / (time.time() - start_time))
+            print("FPS: ", counter / (time.time() - start_time),end='')
             counter = 0
             start_time = time.time()
+
+
+
         if ret:
             result = tfnet.return_predict(frame)
             results.append((i,result))
@@ -142,7 +144,7 @@ def save_meta_data(client,id,type,resource,results):
     # fix to convert numpy float to float
     result = json.dumps(results, default=dumper)
     # get filename from the path + filename
-    utils.save_data(os.path.basename(result),result,type)
+    utils.save_data(os.path.basename(resource),result,type)
 
 
 def video_display(resource):
