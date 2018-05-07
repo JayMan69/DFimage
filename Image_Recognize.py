@@ -127,10 +127,20 @@ def video_process(resource):
             save_meta_data('','','application/json',resource+'.json',results)
             break
 
+def dumper(obj):
+    try:
+        return obj.toJSON()
+    except:
+        if str(type(obj)) == "<class 'numpy.float32'>":
+            return obj.item()
+        else:
+            return obj.__dict__
+
 def save_meta_data(client,id,type,resource,results):
     print ('Saving JSON to S3')
-    result = json.dumps(results)
-
+    #result = json.dumps(results)
+    # fix to convert numpy float to float
+    result = json.dumps(results, default=dumper)
     utils.save_data(resource,result,type)
 
 
