@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <title>AG HLS DEMO</title>
-
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
   <body>
       <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
@@ -12,21 +14,57 @@
       </center>
 
       <script>
+        var i = 0;
         if(Hls.isSupported()) {
           var video = document.getElementById('video');
           var hls = new Hls();
+          //get to output.m3u8 in the static folder
           hls.loadSource('/static/output.m3u8');
-          //hls.loadSource('https://video-dev.github.io/streams/x36xhzz/x36xhzz.m3u8');
           hls.attachMedia(video);
-          hls.on(Hls.Events.MANIFEST_PARSED,function() {
-            video.play();
-        });
+
+          // fired once
+          hls.on(Hls.Events.MANIFEST_PARSED,function(event, data) {
+              video.play();
+              console.log("Manifest parsed");
+
+          });
+
+          // fired once
+          hls.on(Hls.Events.MANIFEST_LOADED,function(event, data) {
+              console.log("Manifest loaded");
+
+          });
+
+
+          // fired multiple times for total number of initial fragments
+          hls.on(Hls.Events.FRAG_LOADED,function(event, data) {
+              console.log("url of frag v2," + data.frag.url)
+              console.log("sequence number v2," + data.frag.sn)
+              //console.log("livesynPosition v1," + hls.liveSyncPosition)
+
+          });
+          // fired multiple times
+          hls.on(Hls.Events.LEVEL_LOADED,function(event,data) {
+                i += 1;
+                console.log(i)
+                console.log("No. of fragments" + i + "," + data.details.fragments.length)
+          });
+
+          // fired once
+          hls.on(Hls.Events.BUFFER_EOS,function(event, data) {
+              // This should be fired only when #EXT-X-ENDLIST exists in Manifest
+              console.log("end of streaming")
+
+          });
+
+
+
        }
        // hls.js is not supported on platforms that do not have Media Source Extensions (MSE) enabled.
        // When the browser has built-in HLS support (check using `canPlayType`), we can provide an HLS manifest (i.e. .m3u8 URL) directly to the video element throught the `src` property.
        // This is using the built-in support of the plain video element, without using hls.js.
         else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = 'https://localhost:5000/images/images/output.m3u8';
+          video.src = '/static/output.m3u8';
           video.addEventListener('canplay',function() {
             video.play();
           });

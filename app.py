@@ -2,15 +2,18 @@
 from flask import Flask, render_template, Response
 from camera import Camera
 from camera import Video
+from flask import request
 
 app = Flask(__name__,static_url_path='/static')
 
+# This prevents caching of files in the static folder
+# TODO need to fix path to m3u8 file in non static folder
+# TODO and then remove below comment
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 
 @app.route('/')
 def index():
-    #return render_template('index.html')
-    #return 'http://localhost:5000/video_feed'
     return render_template('video.html')
 
 @app.route('/video_feed')
