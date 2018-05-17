@@ -2,6 +2,7 @@ from time import time
 from time import sleep
 import cv2
 
+
 class Camera(object):
     def __init__(self):
         self.frames = [open('./images/'+f + '.jpg', 'rb').read() for f in ['1', '2', '3']]
@@ -31,7 +32,7 @@ class Video(object):
         return cv2.imencode('.jpg', image)[1].tobytes()
 
 
-
 #new = Camera()
 #test = new.frames()
 #print ('done')
+

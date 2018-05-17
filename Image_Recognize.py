@@ -113,7 +113,7 @@ def video_process(resource):
         ret, frame = capture.read()
         counter += 1
         if (time.time() - start_time) > x:
-            print("FPS: ", counter / (time.time() - start_time),end='')
+            print("FPS: ", counter / (time.time() - start_time))
             counter = 0
             start_time = time.time()
 
@@ -238,4 +238,6 @@ start_time = time.time()
 #picture_process_display('./images/Bird.jpg',start_time)
 #picture_process_label('./images/Bird.jpg',start_time)
 #print('Completed time',time.time() - start_time)
-video_process('./video/unify1.mp4')
+#video_process('./video/unify1.mp4')
+
+video_display('./video/unify1.h264')
