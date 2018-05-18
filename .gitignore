@@ -22,3 +22,4 @@ summary/
 darkflow.egg-info/
 static/
 __pycache__/
+test*.py
