@@ -9,7 +9,7 @@
       <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
       <center>
-          <h1>DEMO</h1>
+          <h1>DEMO1</h1>
           <video height="600" id="video" controls></video>
       </center>
 
@@ -19,7 +19,7 @@
           var video = document.getElementById('video');
           var hls = new Hls();
           //get to output.m3u8 in the static folder
-          hls.loadSource('/static/output1.m3u8');
+          hls.loadSource('/static/seg.m3u8');
           hls.attachMedia(video);
 
           // fired once

@@ -20,3 +20,5 @@ built_graph/
 .cache/
 summary/
 darkflow.egg-info/
+static/
+__pycache__/

@@ -1,0 +1,105 @@
+import os
+import subprocess
+from subprocess import DEVNULL
+import numpy as np
+
+class FFMPEG_VideoWriter:
+
+    def __init__(self,logfile,w,h):
+        self.logfile = logfile
+        print('calling ffmpeg to convert into HLS format')
+        '''
+        -an: no audio
+        -s: set frame-size
+        -r: set frame-rate. Better to use -framerate
+        -c:v libx264: H264 encoder for H.264
+        HLS commands
+        -crf: Constant Rate Factor. Set to 10 is very good
+        -maxrate: constrain bit rate
+        -b:v constrain bit rate
+        -profile:v baseline: compatibility with all older devices
+        -bufsize: rate control buffer for end client player
+        -pix_fmt: Quicktime supports yuv420 4:2:0 chroma
+        -hls_time: 2 second segments
+        -hls_list_size 0: 0 means manifest contains all segments
+        -t 00:30:00: Not added above, but can add before hls_commands - Cut video off at 30 minutes
+
+        '''
+
+        cmd = ['ffmpeg', '-r 30000/1001',
+               '-an',
+               '-s', '%dx%d' % (w, h),
+               '-r 30000/1001',
+               '-i', '-',
+               '-c:v libx264 -crf 10 -maxrate 900k -b:v 900k ',
+               '-profile:v baseline -bufsize 1800k -pix_fmt yuv420p ',
+               '-hls_time 2 -hls_list_size 0',
+               '-hls_segment_filename 200_%06d.ts seg.m3u8']
+
+        popen_params = {"stdout": DEVNULL,
+                        "stderr": logfile,
+                        "stdin": subprocess.PIPE}
+
+        # This was added so that no extra unwanted window opens on windows
+        # when the child process is created
+        if os.name == "nt":
+            popen_params["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+
+        self.proc = subprocess.Popen(cmd, **popen_params)
+
+
+
+    def write_frame(self, img_array):
+        try:
+            self.proc.stdin.write(img_array.tobytes())
+        except IOError as err:
+            _, ffmpeg_error = self.proc.communicate()
+            error = (str(err) + ("\n\nMoviePy error: FFMPEG encountered "
+                                 "the following error while writing file %s:"
+                                 "\n\n %s" % (self.filename, str(ffmpeg_error))))
+
+            if b"Unknown encoder" in ffmpeg_error:
+
+                error = error + ("\n\nThe video export "
+                                 "failed because FFMPEG didn't find the specified "
+                                 "codec for video encoding (%s). Please install "
+                                 "this codec or change the codec when calling "
+                                 "write_videofile. For instance:\n"
+                                 "  >>> clip.write_videofile('myvid.webm', codec='libvpx')") % (self.codec)
+
+            elif b"incorrect codec parameters ?" in ffmpeg_error:
+
+                error = error + ("\n\nThe video export "
+                                 "failed, possibly because the codec specified for "
+                                 "the video (%s) is not compatible with the given "
+                                 "extension (%s). Please specify a valid 'codec' "
+                                 "argument in write_videofile. This would be 'libx264' "
+                                 "or 'mpeg4' for mp4, 'libtheora' for ogv, 'libvpx for webm. "
+                                 "Another possible reason is that the audio codec was not "
+                                 "compatible with the video codec. For instance the video "
+                                 "extensions 'ogv' and 'webm' only allow 'libvorbis' (default) as a"
+                                 "video codec."
+                                 ) % (self.codec, self.ext)
+
+            elif b"encoder setup failed" in ffmpeg_error:
+
+                error = error + ("\n\nThe video export "
+                                 "failed, possibly because the bitrate you specified "
+                                 "was too high or too low for the video codec.")
+
+            elif b"Invalid encoder type" in ffmpeg_error:
+
+                error = error + ("\n\nThe video export failed because the codec "
+                                 "or file extension you provided is not a video")
+
+            raise IOError(error)
+
+
+    def close(self):
+        if self.proc:
+            self.proc.stdin.close()
+            if self.proc.stderr is not None:
+                self.proc.stderr.close()
+            self.proc.wait()
+
+        self.proc = None

@@ -8,6 +8,7 @@ import utils
 import json
 import time
 import datetime
+from ffmpeg_writer import FFMPEG_VideoWriter
 import os
 
 #%config InlineBackend.figure_format = 'svg'
@@ -147,38 +148,55 @@ def save_meta_data(client,id,type,resource,results):
     utils.save_data(os.path.basename(resource),result,type)
 
 
-def video_display(resource):
+def video_bound_box(resource):
+    # process to create bounded video and save
+    # TODO pass a parameter to show video too
+    # TODO need to move tfnet out of each
+    logfile = open('logfile' + ".log", 'w+')
+
+    tfnet = TFNet(options)
     capture = cv2.VideoCapture(resource)
     colors = [tuple(255 * np.random.rand(3)) for i in range(5)]
     total_frames = capture.get(7)
     print ('Total frames ', total_frames )
     i = 0
+    counter = 0
+    start_time = time.time()
+    x = 1  # displays the frame rate every 1 second
     while (capture.isOpened()):
-        stime = time.time()
         ret, frame = capture.read()
+        if i == 0:
+            # open ffmpeg writer once
+            n, h, w, c = frame.shape
+            ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h)
+        counter += 1
+        if (time.time() - start_time) > x:
+            print("FPS: ", counter / (time.time() - start_time))
+            counter = 0
+            start_time = time.time()
+
         if ret:
-            #results = tfnet.return_predict(frame)
-            #for color, result in zip(colors, results):
-                #tl = (result['topleft']['x'], result['topleft']['y'])
-                #br = (result['bottomright']['x'], result['bottomright']['y'])
-                #label = result['label']
-                #frame = cv2.rectangle(frame, tl, br, color, 7)
-                #frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 0), 2)
-            #cv2.imshow('frame', frame)
+            results = tfnet.return_predict(frame)
+            for color, result in zip(colors, results):
+                tl = (result['topleft']['x'], result['topleft']['y'])
+                br = (result['bottomright']['x'], result['bottomright']['y'])
+                label = result['label']
+                # TODO move label to config
+                if label == 'person' or label =='tvmonitor':
+                    frame = cv2.rectangle(frame, tl, br, color, 7)
+                    frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 0), 2)
+            ffmpegwriter.write_frame(frame)
             i = i + 1
             print('Current frame ', i )
+            #cv2.imshow('frame', frame)
             #if cv2.waitKey(1) & 0xFF == ord('q'):
                 #break
         else:
-            # Lets get the last frame for giggles
-            # where 1 is propid for frame I presume
-            capture.set(1, i-1)
-            ret, frame = capture.read()
-            cv2.imshow('Last Frame', frame)
             capture.release()
-            #cv2.destroyAllWindows()
+            cv2.destroyAllWindows()
+            logfile.close()
+            ffmpegwriter.close()
             break
-
 
 def main():
     #TODO need to clean up main function
@@ -240,4 +258,4 @@ start_time = time.time()
 #print('Completed time',time.time() - start_time)
 #video_process('./video/unify1.mp4')
 
-video_display('./video/unify1.h264')
+video_bound_box('./video/unify1.h264')
