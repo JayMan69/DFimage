@@ -167,7 +167,7 @@ def video_bound_box(resource):
         ret, frame = capture.read()
         if i == 0:
             # open ffmpeg writer once
-            n, h, w, c = frame.shape
+            h, w, c = frame.shape
             ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h)
         counter += 1
         if (time.time() - start_time) > x:

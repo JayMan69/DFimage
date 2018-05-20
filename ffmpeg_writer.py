@@ -23,19 +23,39 @@ class FFMPEG_VideoWriter:
         -hls_time: 2 second segments
         -hls_list_size 0: 0 means manifest contains all segments
         -t 00:30:00: Not added above, but can add before hls_commands - Cut video off at 30 minutes
-
+        # need to investigate flags
+        -y: Not used - overwrite file if exists
+        -re: Read input at native framerate when reading from a web cam
+        # input params 1
+        '-f', 'image2pipe', '-vcodec', 'mjpeg'
+        -'-vcodec', 'mjpeg':
+        # input params 2
+        '-f', 'rawvideo', '-vcodec','rawvideo',
+        '-pix_fmt', 'rgb24': Input picture format
+        # end
         '''
 
-        cmd = ['ffmpeg', '-r 30000/1001',
+        cmd = ['ffmpeg',
+               '-r','30000/1001',
                '-an',
-               '-s', '%dx%d' % (w, h),
-               '-r 30000/1001',
+               '-s', '%dx%d' %(w, h),
+               '-r', '30000/1001',
+               '-f', 'image2pipe',
                '-i', '-',
-               '-c:v libx264 -crf 10 -maxrate 900k -b:v 900k ',
-               '-profile:v baseline -bufsize 1800k -pix_fmt yuv420p ',
-               '-hls_time 2 -hls_list_size 0',
-               '-hls_segment_filename 200_%06d.ts seg.m3u8']
-
+               '-c:v','libx264',
+               '-crf','10',
+               '-maxrate','900k',
+               '-b:v', '900k ',
+               '-profile:v', 'baseline',
+               '-bufsize', '1800k',
+               '-pix_fmt', 'yuv420p',
+               '-hls_time', '2',
+               '-hls_list_size', '0',
+               '-hls_segment_filename', '200_%06d.ts',
+               'seg.m3u8']
+        # instead of writing to log file we can also write to null
+        #nulfp = open(os.devnull, "w")
+        #"stderr": nulfp
         popen_params = {"stdout": DEVNULL,
                         "stderr": logfile,
                         "stdin": subprocess.PIPE}
@@ -44,7 +64,11 @@ class FFMPEG_VideoWriter:
         # when the child process is created
         if os.name == "nt":
             popen_params["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
-
+        # need to check with a simple cmd like ls to see if cmd is constructed properly
+        # need to pipe std err out to below
+        # stderr=subprocess.STDOUT
+        # try simple subprocess below
+        # proc=subprocess.Popen(['cat', 'file'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         self.proc = subprocess.Popen(cmd, **popen_params)
 
 
