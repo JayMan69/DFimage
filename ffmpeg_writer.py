@@ -53,15 +53,19 @@ class FFMPEG_VideoWriter:
             if shutil.which(FFMPEG_EXE) == None:
                 print('Cannot find shutil')
                 raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), FFMPEG_EXE)
+
+        # changed pix_fmt from rgb24 to bgr24
+        # changed -r from 30000/1001 to 1
+        # commented the duplicate -r
         cmd = [FFMPEG_EXE,
                '-y',
-               '-r','30000/1001',
+               '-r','1',
                '-an',
                '-s', '%dx%d' %(w, h),
-               '-r', '30000/1001',
+               #'-r', '30000/1001',
                '-f', 'rawvideo',
                '-vcodec', 'rawvideo',
-               '-pix_fmt', 'rgb24',
+               '-pix_fmt', 'bgr24',
                '-i', '-',
                '-c:v','libx264',
                '-crf','10',
