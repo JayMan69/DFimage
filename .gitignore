@@ -1,6 +1,8 @@
 .coveragerc
 README.md.bak
 .travis.yml
+*.bak
+*.log
 demo.gif
 flow
 video.avi

@@ -1,12 +1,19 @@
 import os
 import subprocess
 from subprocess import DEVNULL
-import numpy as np
+import shutil,errno
+
 
 class FFMPEG_VideoWriter:
 
-    def __init__(self,logfile,w,h):
+    def __init__(self,logfile,w,h,static_dir,filename,segment_name):
         self.logfile = logfile
+        self.static_dir = static_dir
+        self.filename = filename
+        self.segment_name = segment_name
+        output = self.static_dir + self.filename
+        self.segment_name = self.static_dir + self.segment_name
+
         print('calling ffmpeg to convert into HLS format')
         '''
         -an: no audio
@@ -29,18 +36,32 @@ class FFMPEG_VideoWriter:
         # input params 1
         '-f', 'image2pipe', '-vcodec', 'mjpeg'
         -'-vcodec', 'mjpeg':
+
         # input params 2
         '-f', 'rawvideo', '-vcodec','rawvideo',
         '-pix_fmt', 'rgb24': Input picture format
+
+        # input params 3 --! did not work!!!
+        # '-f', 'rawvideo',
+        # '-pix_fmt' 'bgr24'
         # end
         '''
-
-        cmd = ['ffmpeg',
+        FFMPEG_EXE = shutil.which('ffmpeg')
+        # hack for IDE only
+        if FFMPEG_EXE == None:
+            FFMPEG_EXE = "C:\\ProgramData\\Anaconda3\\envs\\agimage\\Scripts\\ffmpeg.EXE"
+            if shutil.which(FFMPEG_EXE) == None:
+                print('Cannot find shutil')
+                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), FFMPEG_EXE)
+        cmd = [FFMPEG_EXE,
+               '-y',
                '-r','30000/1001',
                '-an',
                '-s', '%dx%d' %(w, h),
                '-r', '30000/1001',
-               '-f', 'image2pipe',
+               '-f', 'rawvideo',
+               '-vcodec', 'rawvideo',
+               '-pix_fmt', 'rgb24',
                '-i', '-',
                '-c:v','libx264',
                '-crf','10',
@@ -51,8 +72,8 @@ class FFMPEG_VideoWriter:
                '-pix_fmt', 'yuv420p',
                '-hls_time', '2',
                '-hls_list_size', '0',
-               '-hls_segment_filename', '200_%06d.ts',
-               'seg.m3u8']
+               '-hls_segment_filename', self.segment_name+'_200_%06d.ts',
+               output]
         # instead of writing to log file we can also write to null
         #nulfp = open(os.devnull, "w")
         #"stderr": nulfp
@@ -69,6 +90,8 @@ class FFMPEG_VideoWriter:
         # stderr=subprocess.STDOUT
         # try simple subprocess below
         # proc=subprocess.Popen(['cat', 'file'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        #cmd = ['dir' ,'*.txt']
+        #shutil.which('frob')
         self.proc = subprocess.Popen(cmd, **popen_params)
 
 
@@ -76,11 +99,15 @@ class FFMPEG_VideoWriter:
     def write_frame(self, img_array):
         try:
             self.proc.stdin.write(img_array.tobytes())
+            # for line in iter(self.proc.stdout.readline, b''):
+            #     print (line)
+            # self.proc.stdout.close()
+            # self.proc.wait()
         except IOError as err:
             _, ffmpeg_error = self.proc.communicate()
-            error = (str(err) + ("\n\nMoviePy error: FFMPEG encountered "
+            error = (str(err) + ("\n\nError: FFMPEG encountered "
                                  "the following error while writing file %s:"
-                                 "\n\n %s" % (self.filename, str(ffmpeg_error))))
+                                 "\n\n %s" % (self.logfile , str(ffmpeg_error))))
 
             if b"Unknown encoder" in ffmpeg_error:
 

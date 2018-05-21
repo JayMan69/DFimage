@@ -153,6 +153,9 @@ def video_bound_box(resource):
     # TODO pass a parameter to show video too
     # TODO need to move tfnet out of each
     logfile = open('logfile' + ".log", 'w+')
+    static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
+    filename = 'seg.m3u8'
+    segment_name = 'seg'
 
     tfnet = TFNet(options)
     capture = cv2.VideoCapture(resource)
@@ -168,14 +171,15 @@ def video_bound_box(resource):
         if i == 0:
             # open ffmpeg writer once
             h, w, c = frame.shape
-            ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h)
+            ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h,static_dir,filename,segment_name)
         counter += 1
         if (time.time() - start_time) > x:
             print("FPS: ", counter / (time.time() - start_time))
             counter = 0
             start_time = time.time()
 
-        if ret:
+        # remove the i after testing
+        if ret and i <= 100:
             results = tfnet.return_predict(frame)
             for color, result in zip(colors, results):
                 tl = (result['topleft']['x'], result['topleft']['y'])
@@ -183,6 +187,7 @@ def video_bound_box(resource):
                 label = result['label']
                 # TODO move label to config
                 if label == 'person' or label =='tvmonitor':
+                    # only certain labels put bound boxes
                     frame = cv2.rectangle(frame, tl, br, color, 7)
                     frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 0), 2)
             ffmpegwriter.write_frame(frame)
@@ -194,8 +199,8 @@ def video_bound_box(resource):
         else:
             capture.release()
             cv2.destroyAllWindows()
-            logfile.close()
             ffmpegwriter.close()
+            logfile.close()
             break
 
 def main():
