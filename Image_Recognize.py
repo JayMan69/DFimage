@@ -174,12 +174,12 @@ def video_bound_box(resource):
             ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h,static_dir,filename,segment_name)
         counter += 1
         if (time.time() - start_time) > x:
-            print("FPS: ", counter / (time.time() - start_time))
+            print("FPS: ", counter / (time.time() - start_time), end="", flush=True)
             counter = 0
             start_time = time.time()
 
         # remove the i after testing
-        if ret and i <= 100:
+        if ret :
             results = tfnet.return_predict(frame)
             for color, result in zip(colors, results):
                 tl = (result['topleft']['x'], result['topleft']['y'])
@@ -192,7 +192,7 @@ def video_bound_box(resource):
                     frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 0), 2)
             ffmpegwriter.write_frame(frame)
             i = i + 1
-            print('Current frame ', i )
+            print('Current frame ', i, end="", flush=True )
             #cv2.imshow('frame', frame)
             #if cv2.waitKey(1) & 0xFF == ord('q'):
                 #break
