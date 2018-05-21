@@ -165,6 +165,7 @@ def video_bound_box(resource):
     i = 0
     counter = 0
     start_time = time.time()
+    start_time1 = time.time()
     x = 1  # displays the frame rate every 1 second
     while (capture.isOpened()):
         ret, frame = capture.read()
@@ -174,7 +175,7 @@ def video_bound_box(resource):
             ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h,static_dir,filename,segment_name)
         counter += 1
         if (time.time() - start_time) > x:
-            print("FPS: ", counter / (time.time() - start_time), end="", flush=True)
+            print(" FPS: ", counter / (time.time() - start_time), end="", flush=True)
             counter = 0
             start_time = time.time()
 
@@ -197,6 +198,9 @@ def video_bound_box(resource):
             #if cv2.waitKey(1) & 0xFF == ord('q'):
                 #break
         else:
+
+            print('Completed processing. Closing everything')
+            print("Processing time: ", (time.time() - start_time))
             capture.release()
             cv2.destroyAllWindows()
             ffmpegwriter.close()
