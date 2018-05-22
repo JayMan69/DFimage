@@ -3,13 +3,23 @@ import json
 
 DEFAULT_BUCKET = "kuvrr-analytics-test"
 
-#arn:aws:kinesisvideo:[a-z0-9-]+:[0-9]+:[a-z]+/[a-zA-Z0-9_.-]+/[0-9]+
-DEFAULT_ARN = ''
+
+#virginia / us-east-1
+#DEFAULT_ARN ='arn:aws:kms:us-east-1:519480889604:key/6882aa49-a7b0-48b3-a9c0-a28b0482f662'
+DEFAULT_ARN ='arn:aws:kinesisvideo:us-east-1:519480889604:stream/analytics-test-1/1526308999982'
 session = boto3.Session(profile_name='agimage')
+
+#oregon / us-west-2
+#DEFAULT_ARN = 'arn:aws:kms:us-west-2:519480889604:key/dee07eca-6793-4b7e-baf1-af91ce4bc10e'
+# kvs is written to us-west-2
+#session = boto3.Session(profile_name='agimage1')
+
+
 
 def get_kvs_stream(selType = 'EARLIEST', arn = DEFAULT_ARN):
     kinesis_client = session.client('kinesisvideo')
 
+    response = kinesis_client.list_streams()
     response = kinesis_client.get_data_endpoint(
         StreamARN = arn,
         APIName = 'GET_MEDIA'
@@ -27,13 +37,10 @@ def get_kvs_stream(selType = 'EARLIEST', arn = DEFAULT_ARN):
 
     # use 'Body' if Payload does not work
     # stream['Body'].read()
-    datafeedstreamBody = stream['Payload'].read()
-    #stream['Body'].read()
-    # returns boto3.streamingBody or big blob. See below to return in chunks
-
-    # x=stream['Body']
-    # y = x.read(amt=500)
-
+    datafeedstreamBody = stream['Payload'].read(amt=500)
+    print('success')
+    
+    # stream into stdin of ffmpeg
     return datafeedstreamBody
 
 
@@ -74,12 +81,15 @@ def save_data(key, body, content_type, bucket=DEFAULT_BUCKET):
     except Exception as e:
         print("Error saving file to S3: " + str(e))
 
+    print ('Success')
 
 # Test harnesses
 #get_s3_file('test-images/Birds.jpg')
-#body = {
-#'name':'jaison',
-#'game': 'badi'
-#}
+body = {
+'name':'jaison',
+'game': 'badi'
+}
 
 #save_data('test.json',json.dumps(body),'application/json')
+
+get_kvs_stream()

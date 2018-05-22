@@ -28,6 +28,7 @@ else:
         'gpu' : 1
     }
 
+labels = ['person','tvmonitor']
 
 def picture_process_label(resource,start_time):
 
@@ -171,15 +172,16 @@ def video_bound_box(resource):
         ret, frame = capture.read()
         if i == 0:
             # open ffmpeg writer once
+            # need to put this in the loop to read shape
             h, w, c = frame.shape
-            ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h,static_dir,filename,segment_name)
+            # TODO need to pass the -r parameter from the mkv metadata
+            ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h,static_dir,filename,segment_name,30)
         counter += 1
         if (time.time() - start_time) > x:
             print(" FPS: ", counter / (time.time() - start_time), end="", flush=True)
             counter = 0
             start_time = time.time()
 
-        # remove the i after testing
         if ret :
             results = tfnet.return_predict(frame)
             for color, result in zip(colors, results):
@@ -187,10 +189,11 @@ def video_bound_box(resource):
                 br = (result['bottomright']['x'], result['bottomright']['y'])
                 label = result['label']
                 # TODO move label to config
-                if label == 'person' or label =='tvmonitor':
+                if label in labels :
                     # only certain labels put bound boxes
                     frame = cv2.rectangle(frame, tl, br, color, 7)
-                    frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 0), 2)
+                    frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, .5, (0, 0, 0), 2)
+
             ffmpegwriter.write_frame(frame)
             i = i + 1
             #print('Current frame ', i, end="", flush=True )
@@ -200,7 +203,7 @@ def video_bound_box(resource):
         else:
 
             print('Completed processing. Closing everything')
-            print("Processing time: ", (time.time() - start_time))
+            print("Processing time: ", (time.time() - start_time1))
             capture.release()
             cv2.destroyAllWindows()
             ffmpegwriter.close()
