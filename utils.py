@@ -19,8 +19,9 @@ session = boto3.Session(profile_name='agimage1')
 
 def get_kvs_stream(selType = 'EARLIEST', arn = DEFAULT_ARN):
     kinesis_client = session.client('kinesisvideo')
+    # use response to find the correct end point
+    #response = kinesis_client.list_streams()
 
-    response = kinesis_client.list_streams()
     response = kinesis_client.get_data_endpoint(
         StreamARN = arn,
         APIName = 'GET_MEDIA'
@@ -45,13 +46,14 @@ def get_kvs_stream(selType = 'EARLIEST', arn = DEFAULT_ARN):
     segment_name = 'test'
 
     ffwrite = FFMPEG_VideoWriter1(logfile,static_dir,filename,segment_name)
+    read_amt = 640*480*3*30*1 #(h*w*no. of pixels*fps*60 seconds worth)
     while True:
-        datafeedstreamBody = stream['Payload'].read(amt=1048576)
+        datafeedstreamBody = stream['Payload'].read(amt=read_amt)
         ffwrite.write_frame(datafeedstreamBody)
         print(sys.getsizeof(datafeedstreamBody),i)
         i = i +1
-        if sys.getsizeof(datafeedstreamBody) < 1048609:
-            print('exiting with total pulled ' , 1048609*i)
+        if sys.getsizeof(datafeedstreamBody) < read_amt:
+            print('exiting with total bytes pulled =' , read_amt*i)
             break
 
     print('success')
