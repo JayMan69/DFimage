@@ -1,18 +1,19 @@
 import boto3
 import json
+import sys,os
+from ffmpeg_writer import FFMPEG_VideoWriter1
 
 DEFAULT_BUCKET = "kuvrr-analytics-test"
 
 
 #virginia / us-east-1
-#DEFAULT_ARN ='arn:aws:kms:us-east-1:519480889604:key/6882aa49-a7b0-48b3-a9c0-a28b0482f662'
-DEFAULT_ARN ='arn:aws:kinesisvideo:us-east-1:519480889604:stream/analytics-test-1/1526308999982'
-session = boto3.Session(profile_name='agimage')
+#DEFAULT_ARN ='arn:aws:kinesisvideo:us-east-1:519480889604:stream/analytics-test-1/1526308999982'
+#session = boto3.Session(profile_name='agimage')
 
 #oregon / us-west-2
-#DEFAULT_ARN = 'arn:aws:kms:us-west-2:519480889604:key/dee07eca-6793-4b7e-baf1-af91ce4bc10e'
+DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1526562027624'
 # kvs is written to us-west-2
-#session = boto3.Session(profile_name='agimage1')
+session = boto3.Session(profile_name='agimage1')
 
 
 
@@ -37,11 +38,26 @@ def get_kvs_stream(selType = 'EARLIEST', arn = DEFAULT_ARN):
 
     # use 'Body' if Payload does not work
     # stream['Body'].read()
-    datafeedstreamBody = stream['Payload'].read(amt=500)
+    i = 0
+    logfile = open('logfile1' + ".log", 'w+')
+    static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/kvs/')
+    filename = 'test.m3u8'
+    segment_name = 'test'
+
+    ffwrite = FFMPEG_VideoWriter1(logfile,static_dir,filename,segment_name)
+    while True:
+        datafeedstreamBody = stream['Payload'].read(amt=1048576)
+        ffwrite.write_frame(datafeedstreamBody)
+        print(sys.getsizeof(datafeedstreamBody),i)
+        i = i +1
+        if sys.getsizeof(datafeedstreamBody) < 1048609:
+            print('exiting with total pulled ' , 1048609*i)
+            break
+
     print('success')
-    
+
     # stream into stdin of ffmpeg
-    return datafeedstreamBody
+    #return datafeedstreamBody
 
 
 def get_s3_file(key, bucket=DEFAULT_BUCKET):

@@ -167,14 +167,14 @@ class FFMPEG_VideoWriter:
 
 class FFMPEG_VideoWriter1:
 
-    def __init__(self,logfile,static_dir,filename):
+    def __init__(self,logfile,static_dir,filename,segment_name):
 
 
         self.logfile = logfile
         self.static_dir = static_dir
         self.filename = filename
         output = self.static_dir + self.filename
-        self.segment_name = self.static_dir + self.segment_name
+        self.segment_name = self.static_dir + segment_name
 
         print('calling ffmpeg to convert into mkv format')
         '''
@@ -200,13 +200,25 @@ class FFMPEG_VideoWriter1:
         # commented the duplicate -r
         cmd = [FFMPEG_EXE,
                '-y',
-               '-threads', '4',
                '-an',
-               #'-f', 'rawvideo',
-               #'-vcodec', 'rawvideo',
+               '-f', 'rawvideo',
+               '-vcodec', 'rawvideo',
+               #'-pix_fmt', 'bgr24',
+               '-pix_fmt','yuv420p',
+               # note its -r not r
+               #'-r' , '25',
+               '-s' ,'640x480',
                '-i', '-',
+               #'-r', '25',
                '-c:v','libx264',
-               '-vb', '200k',
+               '-maxrate', '900k',
+               '-b:v', '900k ',
+               '-profile:v', 'baseline',
+               '-bufsize', '1800k',
+               '-pix_fmt', 'yuv420p',
+               '-hls_time', '2',
+               '-hls_list_size', '0',
+               '-hls_segment_filename', self.segment_name + '_200_%06d.ts',
                output]
         # instead of writing to log file we can also write to null
         #nulfp = open(os.devnull, "w")
@@ -232,7 +244,7 @@ class FFMPEG_VideoWriter1:
 
     def write_frame(self, img_array):
         try:
-            self.proc.stdin.write(img_array.tobytes())
+            self.proc.stdin.write(img_array)
             # for line in iter(self.proc.stdout.readline, b''):
             #     print (line)
             # self.proc.stdout.close()
