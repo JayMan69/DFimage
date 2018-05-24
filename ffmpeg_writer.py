@@ -109,10 +109,7 @@ class FFMPEG_VideoWriter:
     def write_frame(self, img_array):
         try:
             self.proc.stdin.write(img_array.tobytes())
-            # for line in iter(self.proc.stdout.readline, b''):
-            #     print (line)
-            # self.proc.stdout.close()
-            # self.proc.wait()
+
         except IOError as err:
             _, ffmpeg_error = self.proc.communicate()
             error = (str(err) + ("\n\nError: FFMPEG encountered "
@@ -167,7 +164,7 @@ class FFMPEG_VideoWriter:
 
 class FFMPEG_VideoWriter1:
 
-    def __init__(self,logfile,static_dir,filename,segment_name):
+    def __init__(self,logfile,static_dir,filename,segment_name,h,w):
 
 
         self.logfile = logfile
@@ -201,24 +198,34 @@ class FFMPEG_VideoWriter1:
         cmd = [FFMPEG_EXE,
                '-y',
                '-an',
+               # cant change from here
                '-f', 'rawvideo',
                '-vcodec', 'rawvideo',
-               #'-pix_fmt', 'bgr24',
-               '-pix_fmt','yuv420p',
-               # note its -r not r
-               #'-r' , '25',
-               '-s' ,'640x480',
+               '-s', '%dx%d' % (h, w),
+               # to here
+               # can comment these from here
+               #'-pix_fmt','rgb24',
+               '-r' , '25',
+                # to here
                '-i', '-',
-               #'-r', '25',
                '-c:v','libx264',
+               #'-c', 'copy',
+               '-crf', '8',
+               '-preset' ,'fast',
+               #'-pix_fmt', 'yuv420p',
                '-maxrate', '900k',
-               '-b:v', '900k ',
+               # changed from 574.1k to higher
+               #'-b:v', '574.1k',
                '-profile:v', 'baseline',
                '-bufsize', '1800k',
-               '-pix_fmt', 'yuv420p',
-               '-hls_time', '2',
-               '-hls_list_size', '0',
-               '-hls_segment_filename', self.segment_name + '_200_%06d.ts',
+               '-f', 'matroska',
+               # cant put any metadata due to ffprobe errors!!!
+               #!'-map_metadata','0:s:0',
+               #'-pix_fmt', 'yuv420p',
+               # uncomment till the end if you want HLS
+               #'-hls_time', '2',
+               #'-hls_list_size', '0',
+               #'-hls_segment_filename', self.segment_name + '_200_%06d.ts',
                output]
         # instead of writing to log file we can also write to null
         #nulfp = open(os.devnull, "w")
