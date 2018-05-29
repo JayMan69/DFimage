@@ -7,7 +7,7 @@ def child_process(queue):
         pid = os.getpid()
         print ('in queue with', pid, value)
 
-        if value == None:
+        if value == None or value == 'Q':
             print('Nothing more to process', value)
             return
 
@@ -35,8 +35,8 @@ def main():
 
     print('In main before quiting', time.time())
     # Need to put Nones for the total number of process
-    queue.put(None)
-    queue.put(None)
+    queue.put('Q')
+    queue.put('Q')
     queue.close()
     p.close()
     p.join()

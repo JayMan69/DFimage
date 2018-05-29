@@ -30,6 +30,8 @@ else:
 
 labels = ['person','tvmonitor']
 
+tfnet = TFNet(options)
+
 def picture_process_label(resource,start_time):
 
     tfnet = TFNet(options)
@@ -149,66 +151,65 @@ def save_meta_data(client,id,type,resource,results):
     utils.save_data(os.path.basename(resource),result,type)
 
 
-def video_bound_box(resource):
+def video_bound_box(resource,filename,segment_name ):
     # process to create bounded video and save
     # TODO pass a parameter to show video too
     # TODO need to move tfnet out of each
     logfile = open('logfile' + ".log", 'w+')
     static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
-    filename = 'seg.m3u8'
-    segment_name = 'seg'
-
-    tfnet = TFNet(options)
     capture = cv2.VideoCapture(resource)
-    colors = [tuple(255 * np.random.rand(3)) for i in range(5)]
-    total_frames = capture.get(7)
-    print ('Total frames ', total_frames )
     i = 0
     counter = 0
     start_time = time.time()
     start_time1 = time.time()
-    x = 1  # displays the frame rate every 1 second
+    x = 1
+
     while (capture.isOpened()):
         ret, frame = capture.read()
         if i == 0:
             # open ffmpeg writer once
             # need to put this in the loop to read shape
             h, w, c = frame.shape
-            # TODO need to pass the -r parameter from the mkv metadata
+            # TODO need to pass the -r parameter from stream meta data
             ffmpegwriter = FFMPEG_VideoWriter(logfile,w,h,static_dir,filename,segment_name,30)
+        if ret:
+            frame = draw_bound_box(frame)
+            ffmpegwriter.write_frame(frame)
+            i = i + 1
+        else:
+            print('Completed processing. Closing everything')
+            print("Processing time: ", (time.time() - start_time1))
+            capture.release()
+            cv2.destroyAllWindows()
+            ffmpegwriter.close()
+            break
+
         counter += 1
         if (time.time() - start_time) > x:
             print(" FPS: ", counter / (time.time() - start_time), end="", flush=True)
             counter = 0
             start_time = time.time()
 
-        if ret :
-            results = tfnet.return_predict(frame)
-            for color, result in zip(colors, results):
-                tl = (result['topleft']['x'], result['topleft']['y'])
-                br = (result['bottomright']['x'], result['bottomright']['y'])
-                label = result['label']
-                # TODO move label to config
-                if label in labels :
-                    # only certain labels put bound boxes
-                    frame = cv2.rectangle(frame, tl, br, color, 7)
-                    frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, .5, (0, 0, 0), 2)
+    logfile.close()
 
-            ffmpegwriter.write_frame(frame)
-            i = i + 1
-            #print('Current frame ', i, end="", flush=True )
-            #cv2.imshow('frame', frame)
-            #if cv2.waitKey(1) & 0xFF == ord('q'):
-                #break
-        else:
+def draw_bound_box(frame):
+    colors = [tuple(255 * np.random.rand(3)) for i in range(5)]
+    results = tfnet.return_predict(frame)
+    for color, result in zip(colors, results):
+        tl = (result['topleft']['x'], result['topleft']['y'])
+        br = (result['bottomright']['x'], result['bottomright']['y'])
+        label = result['label']
+        # TODO move label to config
+        if label in labels :
+            # only certain labels put bound boxes
+            frame = cv2.rectangle(frame, tl, br, color, 7)
+            frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, .5, (0, 0, 0), 2)
 
-            print('Completed processing. Closing everything')
-            print("Processing time: ", (time.time() - start_time1))
-            capture.release()
-            cv2.destroyAllWindows()
-            ffmpegwriter.close()
-            logfile.close()
-            break
+    return frame
+
+
+
+
 
 def main():
     #TODO need to clean up main function
@@ -270,4 +271,6 @@ start_time = time.time()
 #print('Completed time',time.time() - start_time)
 #video_process('./video/unify1.mp4')
 
-video_bound_box('./video/unify1.h264')
+#video_bound_box('./video/b2b.mp4','seg.m3u8','seg')
+
+#video_bound_box('./static/kvs/test.mkv_rawfile40.mkv','seg.m3u8','seg')

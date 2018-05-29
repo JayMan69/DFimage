@@ -2,7 +2,10 @@ import boto3
 import json
 import sys,os
 import time
-from datetime import datetime
+import subprocess
+import multiprocessing,random
+
+
 
 f_n = b'AWS_KINESISVIDEO_FRAGMENT_NUMBERD'
 f_n_s =b'\x87\x10\x00\x00/'
@@ -17,11 +20,18 @@ c_t_e = b'\x1aE'
 #virginia / us-east-1
 #DEFAULT_ARN ='arn:aws:kinesisvideo:us-east-1:519480889604:stream/analytics-test-1/1526308999982'
 #session = boto3.Session(profile_name='agimage')
+#w = 640
+#h = 480
+
 
 #oregon / us-west-2
-DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1526562027624'
+DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1527325436792'
 # kvs is written to us-west-2
 session = boto3.Session(profile_name='agimage1')
+w = 320
+h = 240
+# TODO need to read continuation_token from DB
+continuation_token = '91343852333181486911561392739977168453738419308'
 
 
 def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
@@ -47,8 +57,6 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
     # )
 
 
-    # TODO need to read continuation_token from DB
-    continuation_token = '91343852333181486911561392739977168453738419308'
 
     if selType == '':
         # get stream from last continuation token
@@ -82,8 +90,6 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
 
 
 
-    w = 320
-    h = 240
     # Note this amount might not be exactly correct because the data is already compressed
     read_amt = h*w*3*1*1 #(h*w*no. of pixels*fps*1 seconds worth)
 
@@ -98,39 +104,10 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
     # end of timing variables
 
     while True:
-        index = 0
+
         datafeedstreamBody = stream['Payload'].read(amt=read_amt)
-        ldf = len(datafeedstreamBody)
-        # last position processed
-        last_pos = 0
-        while index < ldf:
-            index = datafeedstreamBody.find(c_t, index)
-            if index == -1 :
-                if last_pos == 0:
-                    write_buffer = write_buffer + datafeedstreamBody
-                else:
-                    # flush write_buffer and get ready to add from next read stream
-                    write_buffer = datafeedstreamBody[last_pos:]
-                break
-            else:
-                #print('continuation token found')
-                c_t_e_pos = datafeedstreamBody.find(c_t_e, index + c_t_s_len1)
-                if c_t_e_pos == -1 :
-                    # TODO fix this error condition. Remaining in next stream call
-                    print('Need to fix this')
-                else:
-                    last_c_token = datafeedstreamBody[(index + c_t_s_len1):c_t_e_pos]
-                    #print('Last token found', last_c_token)
-                    raw_file = open(static_dir + filename + '_rawfile' +str(i) +'.mkv', 'wb')
-                    i = i + 1
-                    write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
-                    last_pos = c_t_e_pos
-                    index = last_pos
-                    raw_file.write(write_buffer)
-                    raw_file.close()
-                    write_buffer = b''
-
-
+        # make call to run_parallel here including using i as start
+        write_buffer,last_c_token,i = process_stream(datafeedstreamBody, static_dir, filename,i, write_buffer)
 
         #print(sys.getsizeof(datafeedstreamBody),j)
         #j = j +1
@@ -144,40 +121,109 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
 
         if sys.getsizeof(datafeedstreamBody) < read_amt:
             print('Exiting with total bytes pulled =' , read_amt*i)
-            raw_file = open(static_dir + filename + '_rawfile' + str(i) + ' .mkv', 'wb')
-            raw_file.write(write_buffer)
-            raw_file.close()
             break
 
-    print('success and done!')
+    print('Streaming done!')
+
+def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer):
+    # writes out begining of valid video (\x1aE\) until AWS_KINESISVIDEO_CONTINUATION_TOKEND end
+    index = 0
+    ldf = len(datafeedstreamBody)
+    # last position processed
+    last_pos = 0
+    while index < ldf:
+        index = datafeedstreamBody.find(c_t, index)
+        if index == -1:
+            if last_pos == 0:
+                write_buffer = write_buffer + datafeedstreamBody
+            else:
+                # flush write_buffer and get ready to add from next read stream
+                write_buffer = datafeedstreamBody[last_pos:]
+            break
+        else:
+            # print('continuation token found')
+            c_t_e_pos = datafeedstreamBody.find(c_t_e, index + c_t_s_len1)
+            if c_t_e_pos == -1:
+                # Check if we can get the same token length as last time
+                # if so its end of file
+                # write
+                new_last_c_token = datafeedstreamBody[(index + c_t_s_len1):]
+                if len(new_last_c_token) == len(last_c_token):
+                    last_c_token = new_last_c_token
+                    raw_file = open(static_dir + filename + '_rawfile' + str(i) + '.mkv', 'wb')
+                    i = i + 1
+                    write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
+                    last_pos = c_t_e_pos
+                    index = last_pos
+                    raw_file.write(write_buffer)
+                    raw_file.close()
+                    write_buffer = b''
+                    break
+                else:
+                    # TODO fix this error condition. Remaining in next stream call
+                    print('Need to fix this')
+
+            else:
+                last_c_token = datafeedstreamBody[(index + c_t_s_len1):c_t_e_pos]
+                # print('Last token found', last_c_token)
+                raw_file = open(static_dir + filename + '_rawfile' + str(i) + '.mkv', 'wb')
+                i = i + 1
+                write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
+                last_pos = c_t_e_pos
+                index = last_pos
+                raw_file.write(write_buffer)
+                raw_file.close()
+                write_buffer = b''
+
+    return write_buffer, last_c_token,i
+
+def run_ffmpeg(queue):
+    while True:
+        value = queue.get()
+        pid = os.getpid()
+
+        if value == 'Q':
+            print('Nothing more to process', value)
+            return
+        else:
+            # call to ffmpeg here
+            cmd = 'ffmpeg -i ' + value[0] +  '-r 25 ' + value[1]
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, err = p.communicate()
+            #return (out, err)
+            print('In queue finished processing ' , pid,value, time.time())
 
 
-import multiprocessing
-import time
+def run_parallel(initial_setup,queue_value):
 
-data = (
-    ['a', '2'], ['b', '4'], ['c', '6'], ['d', '8'],
-    ['e', '1'], ['f', '3'], ['g', '5'], ['h', '7']
-)
+    no_of_processes = 1
 
-def mp_worker(inputs, the_time):
-    print (" Processs %s\tWaiting %s seconds" % (inputs, the_time))
-    time.sleep(int(the_time))
-    print (" Process %s\tDONE" % inputs)
+    if initial_setup == True:
+        queue = multiprocessing.Queue()
+        p = multiprocessing.Pool(no_of_processes,run_ffmpeg,(queue,))
 
-def mp_handler():
-    p = multiprocessing.Pool(2)
-    p.map(mp_worker, data)
+    if queue_value == 'Q':
+        for i in random(0, no_of_processes - 1):
+            queue.put('Q')
+        queue.close()
+        p.close()
+        # This will block until all sub processes are done
+        p.join()
 
-if __name__ == '__main__':
-    mp_handler()
+    else:
+        queue.put(queue_value)
+
+if __name__ == "__main__":
+    print('Main does nothing')
+
+
 
 # Test harness 1
 #date = datetime.strptime('2018-05-23 6:4:27', '%d/%m/%y %H:%M:%S')
 #get_kvs_stream('PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
 
 # Test harness 2
-#get_kvs_stream('EARLIEST',DEFAULT_ARN,'')
+get_kvs_stream('EARLIEST',DEFAULT_ARN,'')
 
 # Test harness 3 use continuation token from db
-get_kvs_stream('',DEFAULT_ARN,'')
+#get_kvs_stream('',DEFAULT_ARN,'')
