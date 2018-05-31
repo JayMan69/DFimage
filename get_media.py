@@ -2,10 +2,9 @@ import boto3
 import json
 import sys,os
 import time
+from datetime import datetime
 import subprocess
 import multiprocessing,random
-
-
 
 f_n = b'AWS_KINESISVIDEO_FRAGMENT_NUMBERD'
 f_n_s =b'\x87\x10\x00\x00/'
@@ -32,6 +31,9 @@ w = 320
 h = 240
 # TODO need to read continuation_token from DB
 continuation_token = '91343852333181486911561392739977168453738419308'
+
+static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/kvs/')
+filename = 'test.mkv'
 
 
 def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
@@ -85,8 +87,6 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
             StartSelector={'StartSelectorType': 'NOW'}
         )
 
-    static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/kvs/')
-    filename = 'test.mkv'
 
 
 
@@ -203,7 +203,7 @@ def run_parallel(initial_setup,queue_value):
         p = multiprocessing.Pool(no_of_processes,run_ffmpeg,(queue,))
 
     if queue_value == 'Q':
-        for i in random(0, no_of_processes - 1):
+        for i in range(0, no_of_processes - 1):
             queue.put('Q')
         queue.close()
         p.close()
@@ -219,11 +219,11 @@ if __name__ == "__main__":
 
 
 # Test harness 1
-#date = datetime.strptime('2018-05-23 6:4:27', '%d/%m/%y %H:%M:%S')
-#get_kvs_stream('PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
+date = datetime.strptime('2018-05-30 9:00:27', '%Y-%m-%d %H:%M:%S')
+get_kvs_stream('PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
 
 # Test harness 2
-get_kvs_stream('EARLIEST',DEFAULT_ARN,'')
+#get_kvs_stream('EARLIEST',DEFAULT_ARN,'')
 
 # Test harness 3 use continuation token from db
 #get_kvs_stream('',DEFAULT_ARN,'')

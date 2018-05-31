@@ -1,39 +1,37 @@
-import multiprocessing
+from multiprocessing import Process
+from multiprocessing import Queue
+import time
 
-num_procs = 4
-def do_work(message):
-  print ("work",message ,"completed")
+class Sentinel(object): pass
 
-def worker(q):
-  for item in iter( q.get, None ):
-    do_work(item)
-    q.task_done()
-  q.task_done()
+class EchoProcess(Process):
 
-def main():
-    q = multiprocessing.JoinableQueue()
-    procs = []
-    for i in range(num_procs):
-      procs.append( (multiprocessing.Process(target=worker),(q,) ))
-      procs[-1].daemon = True
-      procs[-1].start()
+    def __init__(self, iQ):
+        Process.__init__(self)
+        print ('in here')
+        self.iQ = iQ
 
-    source = ['hi','there','how','are','you','doing']
-    for item in source:
-      q.put(item)
+    def run(self):
+        test = self.iQ.get
+        for istring in iter(test, 'Q'):
+            print('reading in child',istring)
+            pass
 
-    q.join()
+        print("exited")
 
-    for p in procs:
-      q.put( None )
 
-    q.join()
 
-    for p in procs:
-      p.join()
-
-    print ("Finished everything....")
-    print ("num active children:", multiprocessing.active_children())
 
 if __name__ == "__main__":
-    main()
+    iQ = Queue()
+    echoProcess = EchoProcess(iQ)
+    echoProcess.start()
+    iQ.put(10)
+    iQ.put(10)
+    for i in range (0,3):
+        print ('put in queue', i)
+        time.sleep(5)
+        iQ.put(i)
+    print('put in last value into queue','Q')
+    iQ.put('Q')
+    echoProcess.join()
