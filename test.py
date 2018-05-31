@@ -7,20 +7,18 @@ manifest_name = 'best.m3u8'
 # same as _200_%06d.ts
 segment_name = 'test.mkv_rawfile{:1d}.mkv'
 start_number = 0
-global p
-global no_of_processes
 no_of_processes = 1
 
 def test():
     process_queue = multiprocessing.Queue()
     process_queue.put(('Start', out_static_dir + segment_name))
     print('In test Starting')
-    run_parallel(True, process_queue)
+    rp = run_parallel('Start', process_queue)
     #time.sleep(2)
 
     process_queue.put(('End','Q'))
     print('Calling run parallel 2nd time')
-    run_parallel(False, process_queue)
+    rp.run('Q', process_queue)
     print ('Test done')
 
 def save_to_S3(queue):
@@ -34,7 +32,6 @@ def save_to_S3(queue):
     try_counts = 0
     first = 0
     start =  start_number
-    logfile = open(out_static_dir + '/logfile' + ".log", 'w+')
 
     while True and (False if (quit == True and try_counts > 2) else True):
         #logfile.write('In while loop, quit, try_counts'+str(quit)+str(try_counts))
@@ -68,7 +65,6 @@ def save_to_S3(queue):
 
         file1 = file.format(start)
         if os.path.isfile(file1) == True:
-            logfile.write('Saving file to S3'+ str(pid) + str(file1) )
             print('Saving file to S3', pid, file1, time.time())
             #save_file(file, DEFAULT_BUCKET, DEFAULT_S3_Folder)
             # save manifest
@@ -80,10 +76,6 @@ def save_to_S3(queue):
 
 
     print('In queue finished processing ', pid, value, time.time())
-    logfile.write('In queue finished processing')
-    # process exits when done
-    logfile.flush()
-    logfile.close()
     return
 
 def test1(queue):
@@ -104,26 +96,25 @@ def test1(queue):
     print('-->queue', value1)
 
 
-def run_parallel(initial_setup, queue_value):
+class run_parallel():
+    def __init__(self, initial_setup, queue_value):
+        print('-->In init with', initial_setup)
+        self.p = multiprocessing.Pool(no_of_processes, save_to_S3, (queue_value,))
+        self.initial_setup = initial_setup
 
-    global p
-    if initial_setup == True:
-
-        print('-->In run_parallel calling multi processing')
-        p = multiprocessing.Pool(1, save_to_S3, (queue_value,))
-
-
-    if initial_setup == False:
-        for i in range(0, no_of_processes):
-            print('--->putting new values', i)
-            queue_value.put('Q')
-            #print('queue put',queue.get())
-        queue_value.close()
-        print('closing p')
-        p.close()
-        # This will block until all sub processes are done
-        print('at p.join')
-        p.join()
+    def run(self,initial_setup, queue_value):
+        print('-->In run with',initial_setup)
+        if initial_setup == 'Q':
+            for i in range(0, no_of_processes):
+                print('--->putting new values', i)
+                queue_value.put('Q')
+                #print('queue put',queue.get())
+            queue_value.close()
+            print('closing p')
+            self.p.close()
+            # This will block until all sub processes are done
+            print('at p.join')
+            self.p.join()
 
 
 if __name__ == "__main__":

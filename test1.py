@@ -20,18 +20,30 @@ class EchoProcess(Process):
         print("exited")
 
 
-
-
 if __name__ == "__main__":
-    iQ = Queue()
-    echoProcess = EchoProcess(iQ)
-    echoProcess.start()
-    iQ.put(10)
-    iQ.put(10)
-    for i in range (0,3):
-        print ('put in queue', i)
-        time.sleep(5)
-        iQ.put(i)
-    print('put in last value into queue','Q')
-    iQ.put('Q')
-    echoProcess.join()
+    # iQ = Queue()
+    # echoProcess = EchoProcess(iQ)
+    # echoProcess.start()
+    # iQ.put(10)
+    # iQ.put(10)
+    # for i in range (0,3):
+    #     print ('put in queue', i)
+    #     time.sleep(5)
+    #     iQ.put(i)
+    # print('put in last value into queue','Q')
+    # iQ.put('Q')
+    # echoProcess.join()
+
+    fl = manifest_file('./static/kvs/textfile.txt')
+
+    last = 0
+    x , y = fl.initial_length
+    for i in range(last,y):
+        print (fl.manifest[i])
+    last = y
+
+    while True:
+        x, y = fl.diff_file_len()
+        for i in range(last,y):
+            print (fl.manifest[i])
+        last = y

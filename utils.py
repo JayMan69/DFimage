@@ -59,8 +59,57 @@ def save_file(file, bucket, folder):
 
     print ('Success')
 
+class manifest_file():
 
-# Test harnesses
+    def __init__(self, fname):
+        self.fname = fname
+        self.manifest = []
+        self.initial_length = self.file_len()
+        self.last_length = self.initial_length[1]
+
+    def file_len(self):
+        i = -1
+        with open(self.fname) as f:
+            for i, l in enumerate(f):
+                self.manifest.append(l)
+        return i + 1, i + 1
+
+    def diff_file_len(self):
+
+        i = self.last_length - 1
+        start = i
+        # print ('start',start)
+        with open(self.fname) as f:
+            for i, l in enumerate(f):
+                if i > start:
+                    self.manifest.append(l)
+        self.last_length = i + 1
+        if i + 1 >= 1:
+            if start < 0:
+                # print('here 1')
+                return 1, i + 1
+            else:
+                # print('here 2')
+                if start + 2 > i + 1:
+                    return i + 1, i + 1
+                else:
+                    return start + 2, i + 1
+        else:
+            return 0, 0
+
+    def set_last_length(self, length):
+        self.last_length = length
+
+    def get_last_length(self):
+        return self.last_length
+
+    def get_initial_length(self):
+        return self.initial_length
+
+
+
+
+            # Test harnesses
 #get_s3_file('test-images/Birds.jpg')
 # body = {
 # 'name':'jaison',
