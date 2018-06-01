@@ -33,7 +33,7 @@ def monitor(filename,manifest_name,segment_name,start_number):
     # program to monitor static folder for .mkv files as they are being written out
     # by get_media.py
 
-    print('First file to start with',filename,start_number)
+    print('First file to start with',filename.format(start_number),start_number)
 
     #raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
     raw_file = static_dir + filename.format(start_number)
@@ -46,6 +46,9 @@ def monitor(filename,manifest_name,segment_name,start_number):
     # queue_value = multiprocessing.Queue()
     # queue_value.put(('Start',out_static_dir+segment_name))
     # run_parallel(True,queue_value)
+    counter = 0
+    start_time = time.time()
+    x = 1  # displays the frame rate every 1 second
 
     while True and True if STREAM  == True  else ( start_number <= TOTAL_ITERATIONS):
         try:
@@ -67,10 +70,17 @@ def monitor(filename,manifest_name,segment_name,start_number):
                     else:
                         print('-->dud fragment skipping')
 
+                print('Processing', raw_file )
                 capture = cv2.VideoCapture(raw_file)
                 while (capture.isOpened()):
                     try:
                         ret, frame = capture.read()
+                        counter += 1
+                        if (time.time() - start_time) > x:
+                            print("FPS: ", counter / (time.time() - start_time))
+                            counter = 0
+                            start_time = time.time()
+
                         if ret:
                             frame = draw_bound_box(frame)
                             ffmpegwriter.write_frame(frame)
@@ -89,9 +99,12 @@ def monitor(filename,manifest_name,segment_name,start_number):
                 raw_file = static_dir + filename.format(start_number)
 
             else:
-                print('-->file not found. Waiting for 1 sec')
-                time.sleep(1)
-                #TODO need to wait and not increment the counter
+                print('-->file not found. Waiting for 10 sec')
+                time.sleep(10)
+                start_number = start_number - 1
+                raw_file = static_dir + filename.format(start_number)
+
+
         except KeyboardInterrupt:
             # need to close everything and save one last time
             capture.release()
@@ -186,7 +199,7 @@ class run_parallel():
 
 
 if __name__ == "__main__":
-    print('Main does nothing')
+    print('Run save media first to warm up the GPUs and then only start stream and get_media')
 
 
 # Test harness
