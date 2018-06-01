@@ -24,7 +24,8 @@ DEFAULT_S3_Folder = '/static'
 # Total_ITERATIONS is the number of files that will be written to S3
 TOTAL_ITERATIONS = 10
 STREAM = False
-filename = 'test.mkv'
+#filename = 'test.mkv'
+filename = 'test_rawfile{:08d}.mkv'
 no_of_processes = 1
 
 
@@ -34,7 +35,8 @@ def monitor(filename,manifest_name,segment_name,start_number):
 
     print('First file to start with',filename,start_number)
 
-    raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
+    #raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
+    raw_file = static_dir + filename.format(start_number)
     logfile = open(static_dir + 'logfile' + ".log", 'w+')
     i = 0
     h = 0
@@ -51,31 +53,45 @@ def monitor(filename,manifest_name,segment_name,start_number):
                 if i == 0:
                     # do this only once for the entire session!
                     # This is to warm up ffmpeg with frame shape
-                    raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
+                    #raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
+                    raw_file = static_dir + filename.format(start_number)
                     capture = cv2.VideoCapture(raw_file)
                     ret, frame = capture.read()
-                    h, w, c = frame.shape
-                    ffmpegwriter = FFMPEG_VideoWriter(logfile, w, h, static_dir, manifest_name, segment_name, 30)
-                    capture.release()
-                    i = 1
+                    # the first mkv file might be a dud. In case all these steps will fail
+                    # until increment counter sets to next good file
+                    if ret:
+                        h, w, c = frame.shape
+                        ffmpegwriter = FFMPEG_VideoWriter(logfile, w, h, static_dir, manifest_name, segment_name, 30)
+                        capture.release()
+                        i = 1
+                    else:
+                        print('-->dud fragment skipping')
 
                 capture = cv2.VideoCapture(raw_file)
                 while (capture.isOpened()):
-                    ret, frame = capture.read()
-                    if ret:
-                        frame = draw_bound_box(frame)
-                        ffmpegwriter.write_frame(frame)
-                        # TODO save meta data info
+                    try:
+                        ret, frame = capture.read()
+                        if ret:
+                            frame = draw_bound_box(frame)
+                            ffmpegwriter.write_frame(frame)
+                            # TODO save meta data info
 
-                    else:
-                        capture.release()
-                        cv2.destroyAllWindows()
-                        break
-                #TODO save meta data
-                print('saving HLS file to S3')
-                raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
+                        else:
+                            capture.release()
+                            cv2.destroyAllWindows()
+                            break
+                        #TODO save meta data
+                        #print('saving HLS file to S3')
+                    except:
+                        print('-->dud fragment skipping')
+
                 start_number = start_number + 1
+                raw_file = static_dir + filename.format(start_number)
 
+            else:
+                print('-->file not found. Waiting for 1 sec')
+                time.sleep(1)
+                #TODO need to wait and not increment the counter
         except KeyboardInterrupt:
             # need to close everything and save one last time
             capture.release()

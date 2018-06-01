@@ -27,14 +27,13 @@ c_t_e = b'\x1aE'
 DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1527325436792'
 # kvs is written to us-west-2
 session = boto3.Session(profile_name='agimage1')
-w = 320
-h = 240
+w = 1280
+h = 720
 # TODO need to read continuation_token from DB
 continuation_token = '91343852333181486911561392739977168453738419308'
 
 static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/kvs/')
-filename = 'test.mkv'
-
+filename = 'test_rawfile{:08d}.mkv'
 
 def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
     kinesis_client = session.client('kinesisvideo')
@@ -150,7 +149,7 @@ def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer):
                 new_last_c_token = datafeedstreamBody[(index + c_t_s_len1):]
                 if len(new_last_c_token) == len(last_c_token):
                     last_c_token = new_last_c_token
-                    raw_file = open(static_dir + filename + '_rawfile' + str(i) + '.mkv', 'wb')
+                    raw_file = open(static_dir + filename.format(i) , 'wb')
                     i = i + 1
                     write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
                     last_pos = c_t_e_pos
@@ -166,7 +165,8 @@ def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer):
             else:
                 last_c_token = datafeedstreamBody[(index + c_t_s_len1):c_t_e_pos]
                 # print('Last token found', last_c_token)
-                raw_file = open(static_dir + filename + '_rawfile' + str(i) + '.mkv', 'wb')
+                #raw_file = open(static_dir + filename + '_rawfile' + str(i) + '.mkv', 'wb')
+                raw_file = open(static_dir + filename.format(i), 'wb')
                 i = i + 1
                 write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
                 last_pos = c_t_e_pos
@@ -214,12 +214,12 @@ def run_parallel(initial_setup,queue_value):
         queue.put(queue_value)
 
 if __name__ == "__main__":
-    print('Main does nothing')
+    print('Remember to put the correct H W or program will crash')
 
 
 
 # Test harness 1
-date = datetime.strptime('2018-05-30 9:00:27', '%Y-%m-%d %H:%M:%S')
+date = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
 get_kvs_stream('PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
 
 # Test harness 2
