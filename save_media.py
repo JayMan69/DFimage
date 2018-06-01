@@ -27,6 +27,7 @@ STREAM = False
 #filename = 'test.mkv'
 filename = 'test_rawfile{:08d}.mkv'
 no_of_processes = 1
+skip_frames = 2
 
 
 def monitor(filename,manifest_name,segment_name,start_number):
@@ -72,6 +73,8 @@ def monitor(filename,manifest_name,segment_name,start_number):
 
                 print('Processing', raw_file )
                 capture = cv2.VideoCapture(raw_file)
+                skip_counter = 0
+
                 while (capture.isOpened()):
                     try:
                         ret, frame = capture.read()
@@ -82,7 +85,9 @@ def monitor(filename,manifest_name,segment_name,start_number):
                             start_time = time.time()
 
                         if ret:
-                            frame = draw_bound_box(frame)
+                            skip_counter = skip_counter  + 1
+                            if skip_counter % skip_frames == 0:
+                                frame = draw_bound_box(frame)
                             ffmpegwriter.write_frame(frame)
                             # TODO save meta data info
 
