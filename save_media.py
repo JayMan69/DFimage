@@ -6,8 +6,8 @@ import time
 from utils import save_file
 
 # global settings
-static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/kvs/')
-out_static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/kvs/')
+static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
+out_static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
 
 
 # s3_save settings

@@ -32,7 +32,7 @@ h = 720
 # TODO need to read continuation_token from DB
 continuation_token = '91343852333181486911561392739977168453738419308'
 
-static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/kvs/')
+static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
 filename = 'test_rawfile{:08d}.mkv'
 
 def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
@@ -120,6 +120,7 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
 
         if sys.getsizeof(datafeedstreamBody) < read_amt:
             print('Exiting with total bytes pulled =' , read_amt*i)
+            #TODO need to sleep here if streaming - because program might be pulling faster than ingest
             break
 
     print('Streaming done!')
