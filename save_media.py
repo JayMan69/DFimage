@@ -22,7 +22,7 @@ DEFAULT_S3_Folder = '/static'
 # monitor settings
 # set Stream = False for finite streaming. Setting STREAM = True will ignore TOTAL_ITERATIONS
 # Total_ITERATIONS is the number of files that will be written to S3
-TOTAL_ITERATIONS = 10
+TOTAL_ITERATIONS = 1000
 STREAM = False
 #filename = 'test.mkv'
 filename = 'test_rawfile{:08d}.mkv'
@@ -104,10 +104,14 @@ def monitor(filename,manifest_name,segment_name,start_number):
             raw_file = static_dir + filename.format(start_number)
 
         else:
-            print('-->file not found. Waiting for 10 sec')
-            time.sleep(10)
-            print('Done Sleeping')
-
+            if i == 0:
+                print('-->Initial run. File not found. Waiting for 10 sec')
+                time.sleep(10)
+                print('Done Sleeping')
+            else:
+                print('-->Middle run. File not found. Waiting for 1 sec')
+                time.sleep(1)
+                print('Done Sleeping')
 
 
 
