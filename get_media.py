@@ -24,11 +24,12 @@ c_t_e = b'\x1aE'
 
 
 #oregon / us-west-2
-DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1527325436792'
+#DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1527325436792'
+DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/demo-stream/1526732311448'
 # kvs is written to us-west-2
 session = boto3.Session(profile_name='agimage1')
-w = 1280
-h = 720
+w = 640
+h = 480
 # TODO need to read continuation_token from DB
 continuation_token = '91343852333181486911561392739977168453738419308'
 
@@ -220,11 +221,14 @@ if __name__ == "__main__":
 
 
 # Test harness 1
-date = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
-get_kvs_stream('PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
+#date = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
+#get_kvs_stream('PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
 
 # Test harness 2
 #get_kvs_stream('EARLIEST',DEFAULT_ARN,'')
 
 # Test harness 3 use continuation token from db
 #get_kvs_stream('',DEFAULT_ARN,'')
+
+# Test live stream
+get_kvs_stream('NOW',DEFAULT_ARN,'')
