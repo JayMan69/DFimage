@@ -37,7 +37,6 @@ def monitor(filename,manifest_name,segment_name,start_number):
     print('First file to start with',filename.format(start_number),start_number)
 
     #raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
-    raw_file = static_dir + filename.format(start_number)
     logfile = open(static_dir + 'logfile' + ".log", 'w+')
     i = 0
     h = 0
@@ -51,73 +50,73 @@ def monitor(filename,manifest_name,segment_name,start_number):
     start_time = time.time()
     x = 1  # displays the frame rate every 1 second
 
+    raw_file = static_dir + filename.format(start_number)
     while True and True if STREAM  == True  else ( start_number <= TOTAL_ITERATIONS):
-        try:
-            if os.path.isfile(raw_file) == True:
-                if i == 0:
-                    # do this only once for the entire session!
-                    # This is to warm up ffmpeg with frame shape
-                    #raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
-                    raw_file = static_dir + filename.format(start_number)
-                    capture = cv2.VideoCapture(raw_file)
-                    ret, frame = capture.read()
-                    # the first mkv file might be a dud. In case all these steps will fail
-                    # until increment counter sets to next good file
-                    if ret:
-                        h, w, c = frame.shape
-                        ffmpegwriter = FFMPEG_VideoWriter(logfile, w, h, static_dir, manifest_name, segment_name, 30)
-                        capture.release()
-                        i = 1
-                    else:
-                        print('-->dud fragment skipping')
 
-                print('Processing', raw_file )
+        if os.path.isfile(raw_file) == True:
+            if i == 0:
+                # do this only once for the entire session!
+                # This is to warm up ffmpeg with frame shape
+                #raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
+                raw_file = static_dir + filename.format(start_number)
                 capture = cv2.VideoCapture(raw_file)
-                skip_counter = 0
+                ret, frame = capture.read()
+                # the first mkv file might be a dud. In case all these steps will fail
+                # until increment counter sets to next good file
+                if ret:
+                    h, w, c = frame.shape
+                    ffmpegwriter = FFMPEG_VideoWriter(logfile, w, h, static_dir, manifest_name, segment_name, 30)
+                    capture.release()
+                    i = 1
+                else:
+                    print('-->dud fragment skipping')
 
-                while (capture.isOpened()):
-                    try:
-                        ret, frame = capture.read()
-                        counter += 1
-                        if (time.time() - start_time) > x:
-                            print("FPS: ", counter / (time.time() - start_time))
-                            counter = 0
-                            start_time = time.time()
+            print('Processing', raw_file )
+            capture = cv2.VideoCapture(raw_file)
+            skip_counter = 0
 
-                        if ret:
-                            skip_counter = skip_counter  + 1
-                            if skip_counter % skip_frames == 0:
-                                frame = draw_bound_box(frame)
-                            ffmpegwriter.write_frame(frame)
-                            # TODO save meta data info
+            while (capture.isOpened()):
+                try:
+                    ret, frame = capture.read()
+                    counter += 1
+                    if (time.time() - start_time) > x:
+                        print("FPS: ", counter / (time.time() - start_time))
+                        counter = 0
+                        start_time = time.time()
+                    if ret:
+                        skip_counter = skip_counter  + 1
+                        if skip_counter % skip_frames == 0:
+                            frame = draw_bound_box(frame)
+                        ffmpegwriter.write_frame(frame)
+                        # TODO save meta data info
+                        #  TODO use boundbox from previous frame
+                    else:
+                        capture.release()
+                        cv2.destroyAllWindows()
+                        break
+                    #TODO save meta data
+                    #print('saving HLS file to S3')
+                except:
+                    print('-->dud fragment skipping')
 
-                        else:
-                            capture.release()
-                            cv2.destroyAllWindows()
-                            break
-                        #TODO save meta data
-                        #print('saving HLS file to S3')
-                    except:
-                        print('-->dud fragment skipping')
+            start_number = start_number + 1
+            raw_file = static_dir + filename.format(start_number)
 
-                start_number = start_number + 1
-                raw_file = static_dir + filename.format(start_number)
-
-            else:
-                print('-->file not found. Waiting for 10 sec')
-                time.sleep(10)
-                start_number = start_number - 1
-                raw_file = static_dir + filename.format(start_number)
+        else:
+            print('-->file not found. Waiting for 10 sec')
+            time.sleep(10)
+            print('Done Sleeping')
 
 
-        except KeyboardInterrupt:
-            # need to close everything and save one last time
-            capture.release()
-            cv2.destroyAllWindows()
-            ffmpegwriter.close()
-            # queue_value.put('Q')
-            # run_parallel(False, queue_value)
-            exit()
+
+
+        # need to close everything and save one last time
+        capture.release()
+        cv2.destroyAllWindows()
+        ffmpegwriter.close()
+        # queue_value.put('Q')
+        # run_parallel(False, queue_value)
+        return
 
     # queue_value.put('Q')
     # run_parallel(False,queue_value)
