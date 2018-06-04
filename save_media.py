@@ -27,7 +27,8 @@ STREAM = False
 #filename = 'test.mkv'
 filename = 'test_rawfile{:08d}.mkv'
 no_of_processes = 1
-skip_frames = 2
+# put 2 to skip every other frame. 1 no skip
+skip_frames = 1
 
 
 def monitor(filename,manifest_name,segment_name,start_number):
@@ -110,13 +111,13 @@ def monitor(filename,manifest_name,segment_name,start_number):
 
 
 
-        # need to close everything and save one last time
-        capture.release()
-        cv2.destroyAllWindows()
-        ffmpegwriter.close()
-        # queue_value.put('Q')
-        # run_parallel(False, queue_value)
-        return
+    # need to close everything and save one last time
+    capture.release()
+    cv2.destroyAllWindows()
+    ffmpegwriter.close()
+    # queue_value.put('Q')
+    # run_parallel(False, queue_value)
+    return
 
     # queue_value.put('Q')
     # run_parallel(False,queue_value)
