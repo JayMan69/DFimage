@@ -24,11 +24,12 @@ else:
     options = {
         'model': 'cfg/yolo.cfg',
         'load': 'bin/yolov2.weights',
-        'threshold': 0.3,
+        'threshold': 0.1,
         'gpu' : 1
     }
 
 labels = ['person','tvmonitor']
+colors = {'person':(0,0,0),'tvmonitor':(0,0,255)}
 
 tfnet = TFNet(options)
 
@@ -192,22 +193,27 @@ def video_bound_box(resource,filename,segment_name ):
 
     logfile.close()
 
-def draw_bound_box(frame):
-    colors = [tuple(255 * np.random.rand(3)) for i in range(5)]
-    results = tfnet.return_predict(frame)
-    for color, result in zip(colors, results):
+def draw_bound_box(frame,last_frame_results,reprint):
+    #colors = [tuple(255 * np.random.rand(3)) for i in range(5)]
+    if reprint == False:
+        results = tfnet.return_predict(frame)
+    else:
+        results = last_frame_results
+
+    for result in  results:
         tl = (result['topleft']['x'], result['topleft']['y'])
         br = (result['bottomright']['x'], result['bottomright']['y'])
         label = result['label']
-        # TODO move label to config
         if label in labels :
             # only certain labels put bound boxes
-            frame = cv2.rectangle(frame, tl, br, color, 7)
+            frame = cv2.rectangle(frame, tl, br, colors[label], 7)
             frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, .5, (0, 0, 0), 2)
 
-    return frame
-
-
+    if reprint == False:
+        return frame, results
+    else:
+        # redraw old results on new frame
+        return frame, ''
 
 
 

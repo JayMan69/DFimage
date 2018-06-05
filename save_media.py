@@ -28,7 +28,7 @@ STREAM = False
 filename = 'test_rawfile{:08d}.mkv'
 no_of_processes = 1
 # put 2 to skip every other frame. 1 no skip
-skip_frames = 1
+skip_frames = 2
 
 
 def monitor(filename,manifest_name,segment_name,start_number):
@@ -85,10 +85,14 @@ def monitor(filename,manifest_name,segment_name,start_number):
                         counter = 0
                         start_time = time.time()
                     if ret:
-                        skip_counter = skip_counter  + 1
-                        if skip_counter % skip_frames == 0:
-                            frame = draw_bound_box(frame)
+                        if skip_counter % skip_frames == 0 or skip_counter == 0:
+                            # reprint = False
+                            frame,last_frame_results = draw_bound_box(frame,'',False)
+                        else:
+                            # reprint = True
+                            frame, last_frame_results  = draw_bound_box(frame, last_frame_results, True)
                         ffmpegwriter.write_frame(frame)
+                        skip_counter = skip_counter + 1
                         # TODO save meta data info
                         #  TODO use boundbox from previous frame
                     else:
