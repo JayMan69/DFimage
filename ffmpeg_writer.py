@@ -73,16 +73,16 @@ class FFMPEG_VideoWriter:
                '-i', '-',
                '-c:v','libx264',
                '-crf','30',
-               #'-g', '60',
+               '-g', '30',
                '-r','%d' %(self.r),
                '-maxrate','900k',
                '-b:v', '900k ',
                '-profile:v', 'baseline',
                '-bufsize', '1800k',
                '-pix_fmt', 'yuv420p',
-               '-hls_time', '2',
+               '-hls_time', '1',
                '-hls_list_size', '0',
-               '-hls_segment_filename', self.segment_name+'_200_%06d.ts',
+               '-hls_segment_filename', self.segment_name+'_200_%08d.ts',
                output]
         # instead of writing to log file we can also write to null
         #nulfp = open(os.devnull, "w")
