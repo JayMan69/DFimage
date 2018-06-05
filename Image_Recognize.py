@@ -24,7 +24,7 @@ else:
     options = {
         'model': 'cfg/yolo.cfg',
         'load': 'bin/yolov2.weights',
-        'threshold': 0.1,
+        'threshold': 0.3,
         'gpu' : 1
     }
 
@@ -206,8 +206,8 @@ def draw_bound_box(frame,last_frame_results,reprint):
         label = result['label']
         if label in labels :
             # only certain labels put bound boxes
-            frame = cv2.rectangle(frame, tl, br, colors[label], 7)
-            frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, .5, (0, 0, 0), 2)
+            frame = cv2.rectangle(frame, tl, br, colors[label], 2)
+            frame = cv2.putText(frame, label, tl, cv2.FONT_HERSHEY_COMPLEX, .3, (0, 0, 0), 2)
 
     if reprint == False:
         return frame, results
