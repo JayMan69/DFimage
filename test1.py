@@ -3,8 +3,9 @@ import sys
 from darkflow.net.build import TFNet
 import time
 import matplotlib.pyplot as plt
-check_value = 10
+check_value = 5
 no_of_trackers = 2
+IOU_THRESHOLD = .7
 
 if sys.platform == 'win32':
     print ('Setting windows options')
@@ -27,8 +28,6 @@ colors = {'person':(0,0,0),'tvmonitor':(0,0,255)}
 
 tfnet = TFNet(options)
 
-
-(major_ver, minor_ver, subminor_ver) = (cv2.__version__).split('.')
 
 def get_iou(bb1, bb2):
     """
@@ -91,59 +90,79 @@ def get_bound_boxes(frame,old_bboxes=''):
              int(result['bottomright']['x']) - int(result['topleft']['x']),
              int(result['bottomright']['y']) - int(result['topleft']['y']))
             bboxes.append ((i,arr1,arr2))
-            i =+ i
+            i = i + 1
             # format for tracking
             # p1 = (int(bbox[0]), int(bbox[1]))
             # p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
 
     return bboxes
 
-def get_match(bbox,bboxes):
-    for i in range(0,len(bboxes)):
-        p1 = (int(bbox[0]), int(bbox[1]), int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
+def get_match(trackers,bboxes,frame):
+    # find matches for existing trackers including clearing out invalid trackers
+    # go through all valid trackers and find their equivalent bound box
+    # if there is no match for a tracker invalidate it!
+    for i in trackers.keys():
+        # do this for only valid trackers!
+        if trackers[i]['status'] == True:
+            found = False
+            bbox = trackers[i]['bbox']
+            # convert into TL, BR format
+            p1 = (int(bbox[0]), int(bbox[1]), int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
+            for y in range(0,len(bboxes)):
+                p2 = bboxes[y][1]
+                iou = get_iou((p1), (p2))
 
-        if get_iou((p1),bboxes[i][1]) > .5:
-            return i
+                if iou > IOU_THRESHOLD:
+                    print('iou', iou)
+                    found = True
+                    # update tracker
+                    tracker = create_tracker()
+                    # convert p2 into ROI format
+                    p2 = bboxes[y][2]
+                    ok = tracker.init(frame, p2)
+                    trackers[i]['status'] = ok
+                    trackers[i]['tracker'] = tracker
+                    trackers[i]['bbox'] = p2
+                    trackers[i]['brox'] = ((bboxes[y][1][0],bboxes[y][1][1]),(bboxes[y][1][2],bboxes[y][1][3]))
+                    break
 
-    return -1
+            if found == False:
+                trackers[i]['status'] = False
+
+    # TODO code for adding new trackers for new bboxes items
+    # go through all items in the objects detection bboxes and find associations in trackers
+    # skipping for now
+    return trackers
+
+def create_tracker():
+    tracker_types = ['BOOSTING', 'MIL', 'KCF', 'TLD', 'MEDIANFLOW' ]
+    tracker_type = tracker_types[1]
+    if tracker_type == 'BOOSTING':
+        return cv2.TrackerBoosting_create()
+    if tracker_type == 'MIL':
+        return cv2.TrackerMIL_create()
+    if tracker_type == 'KCF':
+        return cv2.TrackerKCF_create()
+    if tracker_type == 'TLD':
+        return cv2.TrackerTLD_create()
+    if tracker_type == 'MEDIANFLOW':
+        return cv2.TrackerMedianFlow_create()
+
 
 def run():
 
-    # Set up tracker.
+    # Define an initial bounding box
+    bbox = []
+    # bbox values provided by selectROI
+    #bbox = cv2.selectROI(frame, False)
+    # ROI Format. Need to change BR co-ordinates!!!!
+    bbox.append({'id':0,'bbox':(81, 93, 91, 234)})
+    bbox.append({'id':6,'bbox':(354, 77, 74, 257)})
+    # Set up trackers for number of bounding boxes.
     # Instead of MIL, you can also use
-
-    tracker_types = ['BOOSTING', 'MIL', 'KCF', 'TLD', 'MEDIANFLOW', 'GOTURN']
-    tracker_type = tracker_types[1]
-
-    trackers = []
-
-    if int(minor_ver) < 3:
-        tracker = cv2.Tracker_create(tracker_type)
-    else:
-        if tracker_type == 'BOOSTING':
-            for i in range (0, no_of_trackers):
-                tracker = cv2.TrackerBoosting_create()
-                trackers.append(tracker)
-        if tracker_type == 'MIL':
-            for i in range (0, no_of_trackers):
-                tracker = cv2.TrackerMIL_create()
-                trackers.append(tracker)
-        if tracker_type == 'KCF':
-            for i in range (0, no_of_trackers):
-                tracker = cv2.TrackerKCF_create()
-                trackers.append(tracker)
-        if tracker_type == 'TLD':
-            for i in range (0, no_of_trackers):
-                tracker = cv2.TrackerTLD_create()
-                trackers.append(tracker)
-        if tracker_type == 'MEDIANFLOW':
-            for i in range (0, no_of_trackers):
-                tracker = cv2.TrackerMedianFlow_create()
-                trackers.append(tracker)
-        if tracker_type == 'GOTURN':
-            for i in range (0, no_of_trackers):
-                tracker = cv2.TrackerGOTURN_create()
-                trackers.append(tracker)
+    # bbox values provided by TF x,y , manipulated x , manipulated y
+    #bbox.append((91, 97, 65, 225))
+    #bbox.append((352, 70, 83, 272))
 
 
     # Read video
@@ -161,25 +180,13 @@ def run():
         print('Cannot read video file')
         sys.exit()
 
-    # Define an initial bounding box
-    bbox = []
-
-    # bbox values provided by selectROI
-    #bbox = cv2.selectROI(frame, False)
-    bbox.append((0,(81, 93, 91, 234)))
-    bbox.append((6,(354, 77, 74, 257)))
-
-    # bbox values provided by TF x,y , manipulated x , manipulated y
-    #bbox.append((91, 97, 65, 225))
-    #bbox.append((352, 70, 83, 272))
-
-
-
     # Initialize trackers with first frame and bounding box
-    for i in range(0,no_of_trackers):
-        tracker = trackers[i]
-        ok = tracker.init(frame, bbox[i][1])
-        trackers[i] = tracker
+    trackers={}
+    for i in range(0,len(bbox)):
+        tracker = create_tracker()
+        ok = tracker.init(frame, bbox[i]['bbox'])
+        id1 = bbox[i]['id']
+        if ok == True: trackers[id1] = ({'status':ok,'tracker':tracker,'bbox':bbox[i]['bbox']})
 
     counter = 0
     while True:
@@ -191,45 +198,44 @@ def run():
         # Start timer
         timer = cv2.getTickCount()
 
-        if counter % check_value == 0:
-            bboxes = get_bound_boxes(frame)
 
-        # Update tracker
-        for i in range(0, no_of_trackers):
-            tracker = trackers[i]
-            ok, bbox1 = tracker.update(frame)
-            # Draw bounding box
-            if ok:
-                if counter % check_value == 0 :
-                    # every nth course correct
-                    # and reset tracker - set new bbox
-                    print('reTargetting')
-                    position = get_match(bbox1, bboxes)
-                    if position != -1:
-                        print('matched, reseting tracker to new values in frame')
-                        tracker = cv2.TrackerMIL_create()
-                        ok = tracker.init(frame, bboxes[position][2])
-                        trackers[i] = tracker
-                        bbox1 = bboxes[position][2]
-                    else:
-                        print('need to reset')
+        # Update all trackers
+        for i in trackers.keys():
+            if trackers[i]['status'] == True:
+            # retrieve trackers for each bound box
+                tracker = trackers[i]['tracker']
+                ok, bbox1 = tracker.update(frame)
+                trackers[i]['status'] = ok
+                trackers[i]['bbox'] = bbox1
 
+        if counter >= 80:
+            print('pause here')
 
-                # Tracking success
-                p1 = (int(bbox1[0]), int(bbox1[1]))
-                p2 = (int(bbox1[0] + bbox1[2]), int(bbox1[1] + bbox1[3]))
+        if counter % check_value == 0 :
+            # every nth course correct
+            # and reset tracker - set new bbox
+            print('reTargetting', counter)
+            Newbboxes = get_bound_boxes(frame)
+            trackers = get_match(trackers, Newbboxes,frame)
+
+        # Update all valid bounded boxes
+        for i in trackers.keys():
+            if trackers[i]['status'] == True:
+                bbox2 = trackers[i]['bbox']
+                # Note not all broxs will be updated
+                p1 = (int(bbox2[0]), int(bbox2[1]))
+                p2 = (int(bbox2[0] + bbox2[2]), int(bbox2[1] + bbox2[3]))
                 cv2.rectangle(frame, p1, p2, (255, 0, 0), 2, 1)
-            else:
-                # Tracking failure
-                print('tracking failure')
-                #cv2.putText(frame, "Tracking failure detected", (100, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
-            # save the tracker
-            # trackers[i] = tracker
+
+                sp1 = (int(bbox2[0]-1), int(bbox2[1]-20))
+                sp2 = (int(bbox2[0]+30), int(bbox2[1]))
+                cv2.rectangle(frame, sp1, sp2, (255, 0, 0), thickness=cv2.FILLED)
+                #cv2.putText(frame,6,sp1,cv2.FONT_HERSHEY_SIMPLEX,0.75,(50, 170, 50), 1)
 
         # Calculate Frames per second (FPS)
         fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer);
         # Display tracker type on frame
-        cv2.putText(frame, tracker_type + " Tracker", (100, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 170, 50), 2);
+        cv2.putText(frame, "Frame no. : " + str(int(counter)), (100, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 170, 50), 2);
         # Display FPS on frame
         cv2.putText(frame, "FPS : " + str(int(fps)), (100, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 170, 50), 2);
         # Display result
