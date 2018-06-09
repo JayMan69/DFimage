@@ -107,6 +107,22 @@ class Trackers:
 
         return bboxes
 
+    def draw_bound_boxes(self,frame):
+        for i in self.trackers.keys():
+            if self.trackers[i]['status'] == True:
+                bbox2 = self.trackers[i]['bbox']
+                # Note not all broxs will be updated
+                p1 = (int(bbox2[0]), int(bbox2[1]))
+                p2 = (int(bbox2[0] + bbox2[2]), int(bbox2[1] + bbox2[3]))
+                cv2.rectangle(frame, p1, p2, (255, 0, 0), 2, 1)
+
+                sp1 = (int(bbox2[0]-1), int(bbox2[1]-20))
+                sp2 = (int(bbox2[0]+30), int(bbox2[1]))
+                sp3 = (int(bbox2[0]+ 5), int(bbox2[1]-5))
+                cv2.rectangle(frame, sp1, sp2, (255, 0, 0), thickness=cv2.FILLED)
+                cv2.putText(frame, str(i), sp3, cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 0), 2)
+        return frame
+
     def get_iou(self,bb1, bb2):
         """
         Calculate the Intersection over Union (IoU) of two bounding boxes.
@@ -287,3 +303,13 @@ def testHarness():
             mytracker.retarget(frame)
         else:
             mytracker.update(frame)
+
+        frame = mytracker.draw_bound_boxes(frame)
+        cv2.putText(frame, "Frame no. : " + str(int(counter)), (100, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 170, 50), 2);
+        # Display result
+        cv2.imshow("Tracking", frame)
+        counter = counter + 1
+
+        # Exit if ESC pressed
+        k = cv2.waitKey(1) & 0xff
+        if k == 27: break
