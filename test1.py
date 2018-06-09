@@ -73,8 +73,7 @@ def get_iou(bb1, bb2):
     #assert iou <= 1.0
     return iou
 
-def get_bound_boxes(frame,old_bboxes=''):
-    # TODO need to do transference from old bound boxes to the new bound boxes
+def get_bound_boxes(frame):
     # TODO carrying over id and adding new ids
 
     results = tfnet.return_predict(frame)
@@ -86,6 +85,7 @@ def get_bound_boxes(frame,old_bboxes=''):
             # only certain labels put bound boxes
             arr1 = (int(result['topleft']['x']), int(result['topleft']['y']),
                             int(result['bottomright']['x']), int(result['bottomright']['y']))
+            # IOU format
             arr2 = (int(result['topleft']['x']), int(result['topleft']['y']),
              int(result['bottomright']['x']) - int(result['topleft']['x']),
              int(result['bottomright']['y']) - int(result['topleft']['y']))
