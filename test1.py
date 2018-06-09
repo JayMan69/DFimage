@@ -136,7 +136,8 @@ def get_match(trackers,bboxes,frame):
 
 def create_tracker():
     tracker_types = ['BOOSTING', 'MIL', 'KCF', 'TLD', 'MEDIANFLOW' ]
-    tracker_type = tracker_types[1]
+    # No 2 = KCF is best
+    tracker_type = tracker_types[2]
     if tracker_type == 'BOOSTING':
         return cv2.TrackerBoosting_create()
     if tracker_type == 'MIL':
@@ -208,8 +209,6 @@ def run():
                 trackers[i]['status'] = ok
                 trackers[i]['bbox'] = bbox1
 
-        if counter >= 80:
-            print('pause here')
 
         if counter % check_value == 0 :
             # every nth course correct
@@ -229,8 +228,9 @@ def run():
 
                 sp1 = (int(bbox2[0]-1), int(bbox2[1]-20))
                 sp2 = (int(bbox2[0]+30), int(bbox2[1]))
+                sp3 = (int(bbox2[0]+ 5), int(bbox2[1]-5))
                 cv2.rectangle(frame, sp1, sp2, (255, 0, 0), thickness=cv2.FILLED)
-                #cv2.putText(frame,6,sp1,cv2.FONT_HERSHEY_SIMPLEX,0.75,(50, 170, 50), 1)
+                cv2.putText(frame, str(i), sp3, cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 0), 2)
 
         # Calculate Frames per second (FPS)
         fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer);
