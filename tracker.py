@@ -5,7 +5,7 @@ import time
 import operator
 check_value = 5
 no_of_trackers = 2
-IOU_THRESHOLD = .7
+IOU_THRESHOLD = .5
 
 if sys.platform == 'win32':
     print ('Setting windows options')
@@ -34,26 +34,43 @@ class Trackers:
         # Initialize bboxes if you want to preset tracking
         self.trackers = {}
         self.ids = 0
-        new_labels = False
+        self.new_labels = False
         if bbox != None:
-            for i in range(0, len(bbox)):
-                tracker = self.create_tracker()
-                ok = tracker.init(frame, bbox[i]['bbox'])
-                id1 = bbox[i]['id']
-                if ok == True: self.trackers[id1] = ({'status': ok, 'tracker': tracker, 'bbox': bbox[i]['bbox']})
+            self.build_trackers(bbox, '', frame)
         else:
             # allow for new targets if new labels
-            new_labels = True
+            self.new_labels = True
             Newbboxes = self.get_bound_boxes(frame)
-            for i in range(0, len(Newbboxes)):
+            self.build_trackers(Newbboxes,'Newboxes',frame)
+
+
+    def assign_tracker(self,bboxes,key,frame):
+        tracker = self.create_tracker()
+        new_tracker = {}
+        # convert p2 into ROI format
+        p2 = bboxes[key][2]
+        ok = tracker.init(frame, p2)
+        new_tracker['status'] = ok
+        new_tracker['tracker'] = tracker
+        new_tracker['bbox'] = p2
+        new_tracker['brox'] = ((bboxes[key][1][0], bboxes[key][1][1]), (bboxes[key][1][2], bboxes[key][1][3]))
+        return new_tracker
+
+    def build_trackers(self,boxes_object,box_type,frame):
+        if box_type == 'Newboxes':
+            for i in range(0, len(boxes_object)):
                 tracker = self.create_tracker()
-                ok = tracker.init(frame, Newbboxes[i][2])
+                ok = tracker.init(frame, boxes_object[i][2])
                 id1 = self.ids
                 self.ids = self.ids + 1
-                if ok == True: self.trackers[id1] = ({'status': ok, 'tracker': tracker, 'bbox': Newbboxes[i][2]})
+                if ok == True: self.trackers[id1] = ({'status': ok, 'tracker': tracker, 'bbox': boxes_object[i][2]})
 
-
-        return self.trackers
+        else:
+            for i in range(0, len(boxes_object)):
+                tracker = self.create_tracker()
+                ok = tracker.init(frame, boxes_object[i]['bbox'])
+                id1 = boxes_object[i]['id']
+                if ok == True: self.trackers[id1] = ({'status': ok, 'tracker': tracker, 'bbox': boxes_object[i]['bbox']})
 
 
     def create_tracker(self):
@@ -71,17 +88,22 @@ class Trackers:
         if tracker_type == 'MEDIANFLOW':
             return cv2.TrackerMedianFlow_create()
 
-    def assign_tracker(self,bboxes,key,frame):
-        tracker = self.create_tracker()
-        new_tracker = {}
-        # convert p2 into ROI format
-        p2 = bboxes[key][2]
-        ok = tracker.init(frame, p2)
-        new_tracker['status'] = ok
-        new_tracker['tracker'] = tracker
-        new_tracker['bbox'] = p2
-        new_tracker['brox'] = ((bboxes[key][1][0], bboxes[key][1][1]), (bboxes[key][1][2], bboxes[key][1][3]))
-        return new_tracker
+    def draw_bound_boxes(self,frame):
+        for i in self.trackers.keys():
+            if self.trackers[i]['status'] == True:
+                bbox2 = self.trackers[i]['bbox']
+                # Note not all broxs will be updated
+                p1 = (int(bbox2[0]), int(bbox2[1]))
+                p2 = (int(bbox2[0] + bbox2[2]), int(bbox2[1] + bbox2[3]))
+                cv2.rectangle(frame, p1, p2, (255, 0, 0), 2, 1)
+                # TODO need to ensure that the identity box is not out of the screen
+                sp1 = (int(bbox2[0]-1), int(bbox2[1]-20))
+                sp2 = (int(bbox2[0]+30), int(bbox2[1]))
+                sp3 = (int(bbox2[0]+ 5), int(bbox2[1]-5))
+                cv2.rectangle(frame, sp1, sp2, (255, 0, 0), thickness=cv2.FILLED)
+                cv2.putText(frame, str(i), sp3, cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 0), 2)
+        return frame
+
 
     def get_bound_boxes(self,frame):
         # TODO carrying over id and adding new ids
@@ -107,21 +129,69 @@ class Trackers:
 
         return bboxes
 
-    def draw_bound_boxes(self,frame):
+    def get_closest_match(self, bboxes, frame):
+        # Note this gets the CLOSEST matches!!!!
+        tracker_array = {}
+        assigned_bboxes = {}
         for i in self.trackers.keys():
+            # do this for only valid trackers!
             if self.trackers[i]['status'] == True:
-                bbox2 = self.trackers[i]['bbox']
-                # Note not all broxs will be updated
-                p1 = (int(bbox2[0]), int(bbox2[1]))
-                p2 = (int(bbox2[0] + bbox2[2]), int(bbox2[1] + bbox2[3]))
-                cv2.rectangle(frame, p1, p2, (255, 0, 0), 2, 1)
+                tracker_array[i] = i
+                # initialize bboxes and IOU dictionary
+                tracker_array[i] = {}
+                bbox = self.trackers[i]['bbox']
+                # convert into TL, BR format
+                p1 = (int(bbox[0]), int(bbox[1]), int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
+                for y in range(0, len(bboxes)):
+                    p2 = bboxes[y][1]
+                    iou = self.get_iou((p1), (p2))
+                    tracker_array[i].update({y: iou})
 
-                sp1 = (int(bbox2[0]-1), int(bbox2[1]-20))
-                sp2 = (int(bbox2[0]+30), int(bbox2[1]))
-                sp3 = (int(bbox2[0]+ 5), int(bbox2[1]-5))
-                cv2.rectangle(frame, sp1, sp2, (255, 0, 0), thickness=cv2.FILLED)
-                cv2.putText(frame, str(i), sp3, cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 0), 2)
-        return frame
+                # get the highest tracker above IOU_Threshold as long as bboxes is not blank
+                if len(bboxes) > 0:
+                    stats = tracker_array[i]
+                    # This get the key of the highest value stored in [1]
+                    key = max(stats.items(), key=operator.itemgetter(1))[0]
+                    value = max(stats.items(), key=operator.itemgetter(1))[1]
+                else:
+                    stats = {0:0}
+                    key = 0
+                    value = 0
+
+                if stats[key] > IOU_THRESHOLD:
+                    if key in assigned_bboxes:
+                        print('BBox already assigned, invalidating lower iou tracker')
+                        if assigned_bboxes[key]['iou'] > value:
+                            print('Keeping previous tracker and invalidating tracker', i)
+                            # invalidate current tracker
+                            self.trackers[i]['status'] = False
+                        else:
+                            prev_tracker_id = assigned_bboxes[key]['tracker']
+                            print('Keeping current tracker and invalidating previous saved tracker!!!', prev_tracker_id)
+                            self.trackers[prev_tracker_id]['status'] = False
+                            self.trackers[i] = self.assign_tracker(bboxes, key, frame)
+                            print('Assigning tracker no,', i, ' to bbox key,', key, 'with stats ', stats[key])
+                    else:
+                        assigned_bboxes[key] = {'iou':stats[key],'tracker':i}
+                        # assigned correct bbox values to tracker
+                        self.trackers[i] = self.assign_tracker(bboxes, key, frame)
+                        print('Assigning tracker no,', i, ' to bbox key,', key, 'with stats ', stats[key])
+                else:
+                    # invalidate tracker
+                    print ('invalidating tracker no. for max iou',i, ',', stats[key])
+                    self.trackers[i]['status'] = False
+            else:
+                print('skipping invalid status tracker',i)
+        # get bboxes not assigned and assign to new tracker
+        # check status before assigning
+        bbox_key_values = [item[0] for item in bboxes]
+        unassigned_bbox_key_values = [i for i in bbox_key_values if i not in assigned_bboxes]
+        boxes_object = []
+        for i in unassigned_bbox_key_values:
+            boxes_object.append(bboxes[i])
+
+        if len(unassigned_bbox_key_values) > 0:
+            self.build_trackers(boxes_object, 'Newboxes', frame)
 
     def get_iou(self,bb1, bb2):
         """
@@ -167,50 +237,6 @@ class Trackers:
         # assert iou <= 1.0
         return iou
 
-    def get_closest_match(self, bboxes, frame):
-        # Note this gets the CLOSEST matches!!!!
-        tracker_array = {}
-        assigned_bboxes = {}
-        for i in self.trackers.keys():
-            # do this for only valid trackers!
-            if self.trackers[i]['status'] == True:
-                tracker_array[i] = i
-                # initialize bboxes and IOU dictionary
-                tracker_array[i] = {}
-                bbox = self.trackers[i]['bbox']
-                # convert into TL, BR format
-                p1 = (int(bbox[0]), int(bbox[1]), int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-                for y in range(0, len(bboxes)):
-                    p2 = bboxes[y][1]
-                    iou = self.get_iou((p1), (p2))
-                    tracker_array[i].update({y,iou})
-
-                # get the highest tracker above IOU_Threshold
-                stats = tracker_array[i]
-                key = max(stats.items(), key=operator.itemgetter(1))[0]
-                if stats[key] > IOU_THRESHOLD:
-                    if key in assigned_bboxes:
-                        print('BBox already assigned')
-                        print('Assigning anyway!!!')
-                    else:
-                        assigned_bboxes[key] = key
-                    # assigned correct bbox values to tracker
-                    self.trackers[i] = self.assign_tracker(bboxes, key, frame)
-                else:
-                    # invalidate tracker
-                    self.trackers[i]['status'] = False
-
-        # get bboxes not assigned and assign to new tracker
-        # check status before assigning
-        bbox_key_values = [item[0] for item in bboxes]
-        unassigned_bbox_key_values = [i for i in bbox_key_values if i not in assigned_bboxes]
-        for i in unassigned_bbox_key_values:
-            print('assigning new trackers')
-            tracker = self.create_tracker()
-            ok = tracker.init(frame, bboxes[i][2])
-            id1 = self.ids
-            self.ids = self.ids + 1
-            if ok == True: self.trackers[id1] = ({'status': ok, 'tracker': tracker, 'bbox': bboxes[i][2]})
 
     def get_match(self, bboxes, frame):
         # find matches for existing trackers including clearing out invalid trackers
@@ -238,8 +264,6 @@ class Trackers:
                 if found == False:
                     self.trackers[i]['status'] = False
 
-
-
     def retarget(self,frame):
         Newbboxes = self.get_bound_boxes(frame)
         if self.new_labels == True:
@@ -255,6 +279,8 @@ class Trackers:
                 tracker = self.trackers[i]['tracker']
                 ok, bbox1 = tracker.update(frame)
                 self.trackers[i]['status'] = ok
+                if ok == False:
+                    print('Invalidating tracker no.',i)
                 self.trackers[i]['bbox'] = bbox1
 
 
@@ -275,7 +301,8 @@ def testHarness():
 
 
     # Read video
-    video = cv2.VideoCapture("./video/TUD-Stadtmitte.mp4")
+    #video = cv2.VideoCapture("./video/TUD-Stadtmitte.mp4")
+    video = cv2.VideoCapture("./video/b2b.mp4")
 
     if not video.isOpened():
         print("Could not open video")
@@ -288,7 +315,7 @@ def testHarness():
         sys.exit()
 
     # initialize trackers for all labels on the initial frame
-    mytracker = Trackers(frame)
+    mytracker = Trackers(frame,None)
     counter = 0
     while True:
         # Read 2nd frame onwards
@@ -302,7 +329,7 @@ def testHarness():
             print('reTargetting', counter)
             mytracker.retarget(frame)
         else:
-            mytracker.update(frame)
+            mytracker.update_trackers(frame)
 
         frame = mytracker.draw_bound_boxes(frame)
         cv2.putText(frame, "Frame no. : " + str(int(counter)), (100, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 170, 50), 2);
@@ -313,3 +340,6 @@ def testHarness():
         # Exit if ESC pressed
         k = cv2.waitKey(1) & 0xff
         if k == 27: break
+
+if __name__ == '__main__':
+    testHarness()
