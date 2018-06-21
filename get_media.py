@@ -5,6 +5,8 @@ import time
 from datetime import datetime
 import subprocess
 import multiprocessing,random
+from AGdb.database import database
+from AGdb.create_tables import Stream_Details, Stream_Details_Raw
 
 f_n = b'AWS_KINESISVIDEO_FRAGMENT_NUMBERD'
 f_n_s =b'\x87\x10\x00\x00/'
@@ -16,6 +18,13 @@ c_t_s = b'\x87\x10\x00\x00/'
 c_t_s_len1 = len(c_t + c_t_s)
 c_t_e = b'\x1aE'
 
+no_of_processes = 1
+s_t = b'AWS_KINESISVIDEO_SERVER_TIMESTAMPD'
+s_t_s = b'\x87\x10\x00\x00\x0e'
+s_t_e = b'g'
+s_t_e_len = len(s_t) + len(s_t_s)
+
+
 #virginia / us-east-1
 #DEFAULT_ARN ='arn:aws:kinesisvideo:us-east-1:519480889604:stream/analytics-test-1/1526308999982'
 #session = boto3.Session(profile_name='agimage')
@@ -24,23 +33,26 @@ c_t_e = b'\x1aE'
 
 
 #oregon / us-west-2
-#DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1527325436792'
-DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/demo-stream/1526732311448'
+DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1527325436792'
+#DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/demo-stream/1526732311448'
 # kvs is written to us-west-2
 session = boto3.Session(profile_name='agimage1')
-w = 640
-h = 480
+w = 1280
+h = 720
+camera_id = '2'
 # TODO need to read continuation_token from DB
 continuation_token = '91343852333181486911561392739977168453738419308'
 
 static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
 filename = 'test_rawfile{:08d}.mkv'
 
-def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
-    kinesis_client = session.client('kinesisvideo')
+def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
+    # get camera id given arn name
+    db = database(camera_id)
+    stream_instance = db.get_stream_object('arn',arn)
 
+    kinesis_client = session.client('kinesisvideo')
     #use response object below to find the correct end point
-    # TODO will need to find stream name given client and camera id
     #response = kinesis_client.list_streams()
 
     response = kinesis_client.get_data_endpoint(
@@ -86,9 +98,12 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
             StreamARN=DEFAULT_ARN,
             StartSelector={'StartSelectorType': 'NOW'}
         )
-
-
-
+    else:
+        # old stream. Check if stream details record exists or not
+        p_object = Stream_Details
+        p_object.stream_id = stream_instance.id
+        p_object.start_time = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
+        instance = db.get_stream_details_object('start_time', p_object)
 
     # Note this amount might not be exactly correct because the data is already compressed
     read_amt = h*w*3*1*1 #(h*w*no. of pixels*fps*1 seconds worth)
@@ -106,16 +121,15 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
     while True:
 
         datafeedstreamBody = stream['Payload'].read(amt=read_amt)
-        # make call to run_parallel here including using i as start
-        write_buffer,last_c_token,i = process_stream(datafeedstreamBody, static_dir, filename,i, write_buffer)
+        write_buffer,last_c_token,i = process_stream(datafeedstreamBody, static_dir, filename,i, write_buffer,db,instance,pool)
 
         #print(sys.getsizeof(datafeedstreamBody),j)
         #j = j +1
         counter += 1
         if (time.time() - start_time) > onesecond:
-            print('Last token found', last_c_token)
+            #print('Last token found', last_c_token)
             #print("Bytes processed per second: ", read_amt / (counter / (time.time() - start_time)), end="", flush=True)
-            print("Bytes processed per second: ", read_amt / (counter / (time.time() - start_time)))
+            print("MB processed per second: ", (read_amt/1024/1024) / (counter / (time.time() - start_time)))
             counter = 0
             start_time = time.time()
 
@@ -126,7 +140,11 @@ def get_kvs_stream(selType , arn = DEFAULT_ARN, date='' ):
 
     print('Streaming done!')
 
-def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer):
+
+class Object(object):
+    pass
+
+def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer,db,instance,pool):
     # writes out begining of valid video (\x1aE\) until AWS_KINESISVIDEO_CONTINUATION_TOKEND end
     index = 0
     ldf = len(datafeedstreamBody)
@@ -152,12 +170,19 @@ def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer):
                 if len(new_last_c_token) == len(last_c_token):
                     last_c_token = new_last_c_token
                     raw_file = open(static_dir + filename.format(i) , 'wb')
+                    r_file = filename.format(i)
                     i = i + 1
                     write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
                     last_pos = c_t_e_pos
                     index = last_pos
                     raw_file.write(write_buffer)
                     raw_file.close()
+                    p_object = Object()
+                    p_object.datastream = write_buffer
+                    p_object.rawfile = r_file
+                    p_object.instance = instance
+                    # make the p_object iterable by adding a comma
+                    pool.map(save_raw, (p_object,))
                     write_buffer = b''
                     break
                 else:
@@ -169,66 +194,74 @@ def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer):
                 # print('Last token found', last_c_token)
                 #raw_file = open(static_dir + filename + '_rawfile' + str(i) + '.mkv', 'wb')
                 raw_file = open(static_dir + filename.format(i), 'wb')
+                r_file = filename.format(i)
                 i = i + 1
                 write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
                 last_pos = c_t_e_pos
                 index = last_pos
                 raw_file.write(write_buffer)
                 raw_file.close()
+                p_object = Object()
+                p_object.datastream = write_buffer
+                p_object.rawfile = r_file
+                p_object.instance = instance
+                # make the p_object iterable by adding a comma
+                pool.map(save_raw, (p_object,))
                 write_buffer = b''
 
     return write_buffer, last_c_token,i
 
-def run_ffmpeg(queue):
-    while True:
-        value = queue.get()
-        pid = os.getpid()
 
-        if value == 'Q':
-            print('Nothing more to process', value)
-            return
-        else:
-            # call to ffmpeg here
-            cmd = 'ffmpeg -i ' + value[0] +  '-r 25 ' + value[1]
-            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = p.communicate()
-            #return (out, err)
-            print('In queue finished processing ' , pid,value, time.time())
+def save_raw(p_object):
+    #http://chriskiehl.com/article/parallelism-in-one-line/
+    #https://stackoverflow.com/questions/22411424/python-multiprocessing-pool-map-typeerror-string-indices-must-be-integers-n
 
 
-def run_parallel(initial_setup,queue_value):
+    if hasattr(p_object, 'datastream'):
 
-    no_of_processes = 1
+        db = database(camera_id)
+        datastream = p_object.datastream
+        stream_details_instance = p_object.instance
+        rawfile = p_object.rawfile
 
-    if initial_setup == True:
-        queue = multiprocessing.Queue()
-        p = multiprocessing.Pool(no_of_processes,run_ffmpeg,(queue,))
+        st_start_index = datastream.find(s_t)
+        st_end_index = datastream.find(s_t_e, st_start_index)
+        start_time = datastream[st_start_index+s_t_e_len:st_end_index]
+        start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(start_time))))
+        #2018-06-01 09:02:02
+        p1_object = Stream_Details_Raw
+        p1_object.stream_details_id = stream_details_instance.id
+        p1_object.rawfilename = rawfile
+        p1_object.server_time = start_time
+        db.put_stream_details_raw(p1_object)
+        print('finished save_raw', start_time, rawfile)
 
-    if queue_value == 'Q':
-        for i in range(0, no_of_processes - 1):
-            queue.put('Q')
-        queue.close()
-        p.close()
-        # This will block until all sub processes are done
-        p.join()
-
-    else:
-        queue.put(queue_value)
 
 if __name__ == "__main__":
-    print('Remember to put the correct H W or program will crash')
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    print('!!!!Remember to put the correct H W or program will crash!!!!!')
+    print('!!!!Running with ',h,w)
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    pool = multiprocessing.Pool(processes=no_of_processes)
+    #pool = []
 
 
+    # Test harness 1
+    date = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
+    get_kvs_stream(pool,'PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
 
-# Test harness 1
-#date = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
-#get_kvs_stream('PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
+    # Test harness 2
+    #get_kvs_stream(pool,'EARLIEST',DEFAULT_ARN,'')
 
-# Test harness 2
-#get_kvs_stream('EARLIEST',DEFAULT_ARN,'')
+    # Test harness 3 use continuation token from db
+    #get_kvs_stream(pool,'',DEFAULT_ARN,'')
 
-# Test harness 3 use continuation token from db
-#get_kvs_stream('',DEFAULT_ARN,'')
+    # Test live stream
+    #get_kvs_stream(pool,'NOW',DEFAULT_ARN,'')
 
-# Test live stream
-get_kvs_stream('NOW',DEFAULT_ARN,'')
+    # os.system('ffplay -i test_rawfile00000150.mkv -vf "cropdetect=24:160:0"')
+    # output is
+    #AWS_KINESISVIDEO_SERVER_TIMESTAMP: 1528483898.375
+    #AWS_KINESISVIDEO_PRODUCER_TIMESTAMP: 1528483898.329
+    # will have to break into the smallest rawfiles based on a singular server_timestamp
+    # how to assign that to the correct TLS???

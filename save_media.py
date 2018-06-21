@@ -92,6 +92,7 @@ def monitor(filename,manifest_name,segment_name,start_number):
                             # reprint = True
                             frame, last_frame_results  = draw_bound_box(frame, last_frame_results, True)
                         ffmpegwriter.write_frame(frame)
+                        #TODO needs to assign all .TS files created in this call to the TS associated with the rawfile
                         skip_counter = skip_counter + 1
                         # TODO save meta data info
                         #  TODO use boundbox from previous frame
