@@ -7,6 +7,7 @@ import subprocess
 import multiprocessing,random
 from AGdb.database import database
 from AGdb.create_tables import Stream_Details, Stream_Details_Raw
+from copy import deepcopy
 
 f_n = b'AWS_KINESISVIDEO_FRAGMENT_NUMBERD'
 f_n_s =b'\x87\x10\x00\x00/'
@@ -17,8 +18,11 @@ c_t = b'AWS_KINESISVIDEO_CONTINUATION_TOKEND'
 c_t_s = b'\x87\x10\x00\x00/'
 c_t_s_len1 = len(c_t + c_t_s)
 c_t_e = b'\x1aE'
+continuation_token = '91343852333181486911561392739977168453738419308'
+c_t_full_len = len(c_t) + len(c_t_s) + len(continuation_token)
 
-no_of_processes = 1
+
+no_of_processes = 2
 s_t = b'AWS_KINESISVIDEO_SERVER_TIMESTAMPD'
 s_t_s = b'\x87\x10\x00\x00\x0e'
 s_t_e = b'g'
@@ -110,10 +114,11 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
         stream_details_instance = db.get_stream_details_object('start_time', p_object)
         if stream_details_instance is None:
             # new stream details instance
-            stream_details_instance = Stream_Details
+            stream_details_instance = Stream_Details()
             stream_details_instance.stream_id = stream_instance.id
-            stream_details_instance.live = False
+            stream_details_instance.live = 'False'
             stream_details_instance.resolution = str(w) + 'x' + str(h) + 'x3'
+            stream_details_instance = db.put_stream_details(stream_details_instance)
         else:
             print('Session details exist with same timestamp!!!! Exiting!')
             exit()
@@ -123,24 +128,57 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     #TODO need i to be in db otherwise will continue to overwrite files
     meta_data_instance = db.get_analytics_metaData_object('raw_file_next_value')
     i = int(meta_data_instance.value)
-    #j = 0
-    write_buffer = b''
+
     # get some time variables
     onesecond = 1
     counter = 1
     start_time = time.time()
+    excess_buffer = b''
     # end of timing variables
     first_time = True
+    p_temp_object = Object()
+    p_temp_object.id = stream_details_instance.id
+    db.session.close()
     while True:
 
         datafeedstreamBody = stream['Payload'].read(amt=read_amt)
-        write_buffer,last_c_token,i, s_time, e_time = process_stream(datafeedstreamBody, static_dir, filename,i, write_buffer,db,stream_details_instance,pool)
+        fullstream = excess_buffer + datafeedstreamBody
+        index = 0
+        p_objects =[]
+        while True:
+            start_pos = fullstream.find(c_t,index)
+            # see if you have a continuation token in the stream
+            if start_pos > -1:
+                fragment = fullstream[index:start_pos + c_t_full_len]
+                excess_buffer = fullstream[start_pos + c_t_full_len:]
+                p_object = Object()
+                p_object.static_dir = static_dir
+                p_object.filename = filename
+                p_object.datafeedstreamBody = fragment
+                p_object.i = deepcopy(i)
+                p_object.instance = {'id':p_temp_object.id}
+                p_objects.append(p_object)
+                index = start_pos + c_t_full_len
+                i = i + 1
+
+            else:
+
+                #process_stream_efficiently(p_object)
+                pool.map(process_stream_efficiently, (p_objects))
+
+                break
+
         if first_time == True:
-            first_time = False
-            stream_details_instance.start_time = s_time
-            db.put_stream_details(stream_details_instance)
-        #print(sys.getsizeof(datafeedstreamBody),j)
-        #j = j +1
+            # print('first time is still on')
+            # TODO find if the first rawfile table has been inserted. If its inserted take that TS and update
+            db = database(camera_id)
+            st = db.get_stream_details_raw('min_time', stream_details_instance.id)
+            if st != None:
+                stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
+                stream_details_instance.start_time = st
+                db.session.commit()
+                first_time = False
+            db.session.close()
         counter += 1
         if (time.time() - start_time) > onesecond:
             #print('Last token found', last_c_token)
@@ -152,86 +190,37 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
         if sys.getsizeof(datafeedstreamBody) < read_amt:
             print('Exiting with total bytes pulled =' , read_amt*i)
             #TODO need to sleep here if streaming - because program might be pulling faster than ingest
+            #TODO write excess out
             break
 
     print('Streaming done!')
-    stream_details_instance.end_time = e_time
-    db.put_stream_details(stream_details_instance)
-
     pool.close()
+    pool.join()
+    # TODO need to get the last servertimestamps from the raw tables to update the Stream_details table
+    et = db.get_stream_details_raw('max_time', stream_details_instance.id)
+    stream_details_instance.start_time = et
+    db.session.commit()
 
 class Object(object):
     pass
 
-def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer,db,instance,pool):
-    # writes out begining of valid video (\x1aE\) until AWS_KINESISVIDEO_CONTINUATION_TOKEND end
-    index = 0
-    first_time = True
-    start_time = ''
-    potential_last_start_time = ''
-    ldf = len(datafeedstreamBody)
-    # last position processed
-    last_pos = 0
-    while index < ldf:
-        index = datafeedstreamBody.find(c_t, index)
-        if index == -1:
-            if last_pos == 0:
-                write_buffer = write_buffer + datafeedstreamBody
-            else:
-                # flush write_buffer and get ready to add from next read stream
-                write_buffer = datafeedstreamBody[last_pos:]
-            break
-        else:
-            # print('continuation token found')
-            c_t_e_pos = datafeedstreamBody.find(c_t_e, index + c_t_s_len1)
-            if c_t_e_pos == -1:
-                # Check if we can get the same token length as last time
-                # if so its end of file
-                # write
-                new_last_c_token = datafeedstreamBody[(index + c_t_s_len1):]
-                if len(new_last_c_token) == len(last_c_token):
-                    last_c_token = new_last_c_token
-                    raw_file = open(static_dir + filename.format(i) , 'wb')
-                    r_file = filename.format(i)
-                    i = i + 1
-                    write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
-                    last_pos = c_t_e_pos
-                    index = last_pos
-                    raw_file.write(write_buffer)
-                    raw_file.close()
-                    if first_time == True:
-                        start_time = prep_data_raw(write_buffer,r_file,instance)
-                        first_time = False
-                    else:
-                        potential_last_start_time = prep_data_raw(write_buffer, r_file, instance)
+def process_stream_efficiently(p_object):
+    # This process expects exactly one Fragment and writes out only one file
+    if hasattr(p_object, 'datafeedstreamBody'):
+        datafeedstreamBody = p_object.datafeedstreamBody
+        static_dir = p_object.static_dir
+        filename = p_object.filename
+        i = p_object.i
+        instance = p_object.instance
 
-                    write_buffer = b''
-                    break
-                else:
-                    # TODO fix this error condition. Remaining in next stream call
-                    print('Need to fix this')
+        raw_file = open(static_dir + filename.format(i), 'wb')
+        r_file = filename.format(i)
+        write_buffer = datafeedstreamBody
+        raw_file.write(write_buffer)
+        raw_file.close()
+        prep_data_raw(write_buffer, r_file, instance)
+    return
 
-            else:
-                last_c_token = datafeedstreamBody[(index + c_t_s_len1):c_t_e_pos]
-                # print('Last token found', last_c_token)
-                #raw_file = open(static_dir + filename + '_rawfile' + str(i) + '.mkv', 'wb')
-                raw_file = open(static_dir + filename.format(i), 'wb')
-                r_file = filename.format(i)
-                i = i + 1
-                write_buffer = write_buffer + datafeedstreamBody[last_pos:c_t_e_pos]
-                last_pos = c_t_e_pos
-                index = last_pos
-                raw_file.write(write_buffer)
-                raw_file.close()
-                if first_time == True:
-                    start_time = prep_data_raw(write_buffer, r_file, instance)
-                    first_time = False
-                else:
-                    potential_last_start_time = prep_data_raw(write_buffer, r_file, instance)
-
-                write_buffer = b''
-
-    return write_buffer, last_c_token,i , start_time, potential_last_start_time
 
 def prep_data_raw(write_buffer,r_file,instance):
 
@@ -243,7 +232,7 @@ def prep_data_raw(write_buffer,r_file,instance):
     p_object = Object()
     p_object.start_time = start_time
     p_object.rawfile = r_file
-    p_object.stream_details_id = instance.id
+    p_object.instance = instance
     p_object.type = 'Stream_Details_Raw'
     # make the p_object iterable by adding a comma
     #pool.map(save_raw, (p_object,))
@@ -254,36 +243,33 @@ def save_raw(p_object):
     #http://chriskiehl.com/article/parallelism-in-one-line/
     #https://stackoverflow.com/questions/22411424/python-multiprocessing-pool-map-typeerror-string-indices-must-be-integers-n
 
+    if p_object.type == 'Stream_Details_Raw':
+        db = database(camera_id)
+        id = p_object.instance['id']
+        rawfile = p_object.rawfile
+        start_time  = p_object.start_time
 
-    if hasattr(p_object, 'r_file'):
-        if p_object.type == 'Stream_Details_Raw':
-            db = database(camera_id)
+        p1_object = Stream_Details_Raw
+        p1_object.stream_details_id = id
+        p1_object.rawfilename = rawfile
+        p1_object.server_time = start_time
+        db.put_stream_details_raw(p1_object)
+        db.session.close()
+        #print('finished Stream_Details_Raw', os.getpid(), start_time, rawfile)
 
+    elif p_object.type == 'Stream_Details':
+        #db = database(camera_id)
+        if p_object.operation == 'Update':
+            print ('update')
+        else:
+            print('insert')
 
-            id = p_object.stream_details_id
-            rawfile = p_object.rawfile
-            start_time  = p_object.start_time
+        print('finished Stream_Details', os.getpid())
 
-            p1_object = Stream_Details_Raw
-            p1_object.stream_details_id = id
-            p1_object.rawfilename = rawfile
-            p1_object.server_time = start_time
-            db.put_stream_details_raw(p1_object)
-            print('finished Stream_Details_Raw', os.getpid(), start_time, rawfile)
+    elif p_object.type == 'Analytics_MetaData':
+        print('update')
 
-        elif p_object.type == 'Stream_Details':
-            db = database(camera_id)
-            if p_object.operation == 'Update':
-                print ('update')
-            else:
-                print('insert')
-
-            print('finished Stream_Details', os.getpid())
-
-        elif p_object.type == 'Analytics_MetaData':
-            print('update')
-
-            print('finished updating Analytics_MetaData', os.getpid())
+        print('finished updating Analytics_MetaData', os.getpid())
 
 if __name__ == "__main__":
     print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
@@ -291,8 +277,6 @@ if __name__ == "__main__":
     print('!!!!Running with ',w,h)
     print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     pool = multiprocessing.Pool(processes=no_of_processes)
-    #pool = []
-
 
     # Test harness 1
     date = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
