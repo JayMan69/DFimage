@@ -98,18 +98,31 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
             StreamARN=DEFAULT_ARN,
             StartSelector={'StartSelectorType': 'NOW'}
         )
+        stream_details_instance = Stream_Details
+        stream_details_instance.stream_id = stream_instance.id
+        stream_details_instance.live = True
+        stream_details_instance.resolution = str(w) + 'x' + str(h) + 'x3'
     else:
         # old stream. Check if stream details record exists or not
         p_object = Stream_Details
         p_object.stream_id = stream_instance.id
-        p_object.start_time = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
-        instance = db.get_stream_details_object('start_time', p_object)
-
-    # Note this amount might not be exactly correct because the data is already compressed
+        p_object.start_time = date
+        stream_details_instance = db.get_stream_details_object('start_time', p_object)
+        if stream_details_instance is None:
+            # new stream details instance
+            stream_details_instance = Stream_Details
+            stream_details_instance.stream_id = stream_instance.id
+            stream_details_instance.live = False
+            stream_details_instance.resolution = str(w) + 'x' + str(h) + 'x3'
+        else:
+            print('Session details exist with same timestamp!!!! Exiting!')
+            exit()
+        # Note this amount might not be exactly correct because the data is already compressed
     read_amt = h*w*3*1*1 #(h*w*no. of pixels*fps*1 seconds worth)
 
     #TODO need i to be in db otherwise will continue to overwrite files
-    i = 0
+    meta_data_instance = db.get_analytics_metaData_object('raw_file_next_value')
+    i = int(meta_data_instance.value)
     #j = 0
     write_buffer = b''
     # get some time variables
@@ -117,12 +130,15 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     counter = 1
     start_time = time.time()
     # end of timing variables
-
+    first_time = True
     while True:
 
         datafeedstreamBody = stream['Payload'].read(amt=read_amt)
-        write_buffer,last_c_token,i = process_stream(datafeedstreamBody, static_dir, filename,i, write_buffer,db,instance,pool)
-
+        write_buffer,last_c_token,i, s_time, e_time = process_stream(datafeedstreamBody, static_dir, filename,i, write_buffer,db,stream_details_instance,pool)
+        if first_time == True:
+            first_time = False
+            stream_details_instance.start_time = s_time
+            db.put_stream_details(stream_details_instance)
         #print(sys.getsizeof(datafeedstreamBody),j)
         #j = j +1
         counter += 1
@@ -139,7 +155,10 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
             break
 
     print('Streaming done!')
+    stream_details_instance.end_time = e_time
+    db.put_stream_details(stream_details_instance)
 
+    pool.close()
 
 class Object(object):
     pass
@@ -147,6 +166,9 @@ class Object(object):
 def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer,db,instance,pool):
     # writes out begining of valid video (\x1aE\) until AWS_KINESISVIDEO_CONTINUATION_TOKEND end
     index = 0
+    first_time = True
+    start_time = ''
+    potential_last_start_time = ''
     ldf = len(datafeedstreamBody)
     # last position processed
     last_pos = 0
@@ -177,12 +199,12 @@ def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer,db,inst
                     index = last_pos
                     raw_file.write(write_buffer)
                     raw_file.close()
-                    p_object = Object()
-                    p_object.datastream = write_buffer
-                    p_object.rawfile = r_file
-                    p_object.instance = instance
-                    # make the p_object iterable by adding a comma
-                    pool.map(save_raw, (p_object,))
+                    if first_time == True:
+                        start_time = prep_data_raw(write_buffer,r_file,instance)
+                        first_time = False
+                    else:
+                        potential_last_start_time = prep_data_raw(write_buffer, r_file, instance)
+
                     write_buffer = b''
                     break
                 else:
@@ -201,46 +223,71 @@ def process_stream(datafeedstreamBody,static_dir,filename,i,write_buffer,db,inst
                 index = last_pos
                 raw_file.write(write_buffer)
                 raw_file.close()
-                p_object = Object()
-                p_object.datastream = write_buffer
-                p_object.rawfile = r_file
-                p_object.instance = instance
-                # make the p_object iterable by adding a comma
-                pool.map(save_raw, (p_object,))
+                if first_time == True:
+                    start_time = prep_data_raw(write_buffer, r_file, instance)
+                    first_time = False
+                else:
+                    potential_last_start_time = prep_data_raw(write_buffer, r_file, instance)
+
                 write_buffer = b''
 
-    return write_buffer, last_c_token,i
+    return write_buffer, last_c_token,i , start_time, potential_last_start_time
 
+def prep_data_raw(write_buffer,r_file,instance):
+
+    st_start_index = write_buffer.find(s_t)
+    st_end_index = write_buffer.find(s_t_e, st_start_index)
+    start_time = write_buffer[st_start_index + s_t_e_len:st_end_index]
+    start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(start_time))))
+
+    p_object = Object()
+    p_object.start_time = start_time
+    p_object.rawfile = r_file
+    p_object.stream_details_id = instance.id
+    p_object.type = 'Stream_Details_Raw'
+    # make the p_object iterable by adding a comma
+    pool.map(save_raw, (p_object,))
+    return start_time
 
 def save_raw(p_object):
     #http://chriskiehl.com/article/parallelism-in-one-line/
     #https://stackoverflow.com/questions/22411424/python-multiprocessing-pool-map-typeerror-string-indices-must-be-integers-n
 
 
-    if hasattr(p_object, 'datastream'):
+    if hasattr(p_object, 'r_file'):
+        if p_object.type == 'Stream_Details_Raw':
+            db = database(camera_id)
 
-        db = database(camera_id)
-        datastream = p_object.datastream
-        stream_details_instance = p_object.instance
-        rawfile = p_object.rawfile
 
-        st_start_index = datastream.find(s_t)
-        st_end_index = datastream.find(s_t_e, st_start_index)
-        start_time = datastream[st_start_index+s_t_e_len:st_end_index]
-        start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(start_time))))
-        #2018-06-01 09:02:02
-        p1_object = Stream_Details_Raw
-        p1_object.stream_details_id = stream_details_instance.id
-        p1_object.rawfilename = rawfile
-        p1_object.server_time = start_time
-        db.put_stream_details_raw(p1_object)
-        print('finished save_raw', start_time, rawfile)
+            id = p_object.stream_details_id
+            rawfile = p_object.rawfile
+            start_time  = p_object.start_time
 
+            p1_object = Stream_Details_Raw
+            p1_object.stream_details_id = id
+            p1_object.rawfilename = rawfile
+            p1_object.server_time = start_time
+            db.put_stream_details_raw(p1_object)
+            print('finished Stream_Details_Raw', os.getpid(), start_time, rawfile)
+
+        elif p_object.type == 'Stream_Details':
+            db = database(camera_id)
+            if p_object.operation == 'Update':
+                print ('update')
+            else:
+                print('insert')
+
+            print('finished Stream_Details', os.getpid())
+
+        elif p_object.type == 'Analytics_MetaData':
+            print('update')
+
+            print('finished updating Analytics_MetaData', os.getpid())
 
 if __name__ == "__main__":
     print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     print('!!!!Remember to put the correct H W or program will crash!!!!!')
-    print('!!!!Running with ',h,w)
+    print('!!!!Running with ',w,h)
     print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     pool = multiprocessing.Pool(processes=no_of_processes)
     #pool = []
