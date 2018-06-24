@@ -128,7 +128,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     #TODO need i to be in db otherwise will continue to overwrite files
     meta_data_instance = db.get_analytics_metaData_object('raw_file_next_value')
     i = int(meta_data_instance.value)
-
+    start_i = deepcopy(i)
     # get some time variables
     onesecond = 1
     counter = 1
@@ -139,6 +139,8 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     p_temp_object = Object()
     p_temp_object.id = stream_details_instance.id
     db.session.close()
+    results = {}
+    final_results = {}
     while True:
 
         datafeedstreamBody = stream['Payload'].read(amt=read_amt)
@@ -164,18 +166,24 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
             else:
 
                 #process_stream_efficiently(p_object)
-                pool.map(process_stream_efficiently, (p_objects))
+                results = pool.map(process_stream_efficiently, (p_objects))
+                if first_time == True:
+                    # append only for a few iterations
+                    for a in results:
+                        for key in a :
+                            k1 = key
+                            v1 = a[key]
+                            final_results.update({k1:v1})
+
 
                 break
 
         if first_time == True:
             # print('first time is still on')
             # TODO find if the first rawfile table has been inserted. If its inserted take that TS and update
-            db = database(camera_id)
-            st = db.get_stream_details_raw('min_time', stream_details_instance.id)
-            if st != None:
+            if start_i in  final_results:
                 stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
-                stream_details_instance.start_time = st
+                stream_details_instance.start_time = final_results[start_i][1]
                 db.session.commit()
                 first_time = False
             db.session.close()
@@ -196,9 +204,10 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     print('Streaming done!')
     pool.close()
     pool.join()
-    # TODO need to get the last servertimestamps from the raw tables to update the Stream_details table
+    # Note we are using max statement here because its a one time only
     et = db.get_stream_details_raw('max_time', stream_details_instance.id)
-    stream_details_instance.start_time = et
+    stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
+    stream_details_instance.end_time = et
     db.session.commit()
 
 class Object(object):
@@ -218,8 +227,8 @@ def process_stream_efficiently(p_object):
         write_buffer = datafeedstreamBody
         raw_file.write(write_buffer)
         raw_file.close()
-        prep_data_raw(write_buffer, r_file, instance)
-    return
+        start_time,id = prep_data_raw(write_buffer, r_file, instance)
+    return {i: (id,start_time)}
 
 
 def prep_data_raw(write_buffer,r_file,instance):
@@ -236,8 +245,8 @@ def prep_data_raw(write_buffer,r_file,instance):
     p_object.type = 'Stream_Details_Raw'
     # make the p_object iterable by adding a comma
     #pool.map(save_raw, (p_object,))
-    save_raw(p_object)
-    return start_time
+    id = save_raw(p_object)
+    return start_time,id
 
 def save_raw(p_object):
     #http://chriskiehl.com/article/parallelism-in-one-line/
@@ -253,8 +262,10 @@ def save_raw(p_object):
         p1_object.stream_details_id = id
         p1_object.rawfilename = rawfile
         p1_object.server_time = start_time
-        db.put_stream_details_raw(p1_object)
+        row = db.put_stream_details_raw(p1_object)
+        retval = row.id
         db.session.close()
+        return retval
         #print('finished Stream_Details_Raw', os.getpid(), start_time, rawfile)
 
     elif p_object.type == 'Stream_Details':
