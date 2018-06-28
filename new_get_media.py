@@ -3,7 +3,6 @@ import json
 import sys,os
 import time
 from datetime import datetime
-import subprocess
 import multiprocessing,random
 from AGdb.database import database
 from AGdb.create_tables import Stream_Details, Stream_Details_Raw
@@ -28,6 +27,11 @@ s_t_s = b'\x87\x10\x00\x00\x0e'
 s_t_e = b'g'
 s_t_e_len = len(s_t) + len(s_t_s)
 
+p_t = b'AWS_KINESISVIDEO_PRODUCER_TIMESTAMPD'
+p_t_s = b'\x87\x10\x00\x00\x0e'
+p_t_e = b'\x1fC'
+p_t_e_len = len(p_t) + len(p_t_s)
+
 
 #virginia / us-east-1
 #DEFAULT_ARN ='arn:aws:kinesisvideo:us-east-1:519480889604:stream/analytics-test-1/1526308999982'
@@ -48,10 +52,11 @@ camera_id = '2'
 continuation_token = '91343852333181486911561392739977168453738419308'
 
 static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
-filename = 'test_rawfile{:08d}.mkv'
 
 def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     # get camera id given arn name
+    filename = 'test_' +str(camera_id)+ '_rawfile{:08d}.mkv'
+
     db = database(camera_id)
     stream_instance = db.get_stream_object('arn',arn)
 
@@ -232,14 +237,22 @@ def process_stream_efficiently(p_object):
 
 
 def prep_data_raw(write_buffer,r_file,instance):
-
+    # get server time
     st_start_index = write_buffer.find(s_t)
     st_end_index = write_buffer.find(s_t_e, st_start_index)
     start_time = write_buffer[st_start_index + s_t_e_len:st_end_index]
     start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(start_time))))
 
+    # get producer time
+    pt_start_index = write_buffer.find(p_t)
+    pt_end_index = write_buffer.find(p_t_e, pt_start_index)
+    pstart_time = write_buffer[pt_start_index + p_t_e_len:pt_end_index]
+    pstart_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(pstart_time))))
+
+
     p_object = Object()
     p_object.start_time = start_time
+    p_object.producer_time = pstart_time
     p_object.rawfile = r_file
     p_object.instance = instance
     p_object.type = 'Stream_Details_Raw'
@@ -257,11 +270,13 @@ def save_raw(p_object):
         id = p_object.instance['id']
         rawfile = p_object.rawfile
         start_time  = p_object.start_time
+        pstart_time = p_object.producer_time
 
         p1_object = Stream_Details_Raw
         p1_object.stream_details_id = id
         p1_object.rawfilename = rawfile
         p1_object.server_time = start_time
+        p1_object.producer_time = pstart_time
         row = db.put_stream_details_raw(p1_object)
         retval = row.id
         db.session.close()
