@@ -28,8 +28,10 @@ else:
         'gpu' : 1
     }
 
-labels = ['person','tvmonitor']
-colors = {'person':(0,0,0),'tvmonitor':(0,0,255)}
+labels = ['person','knife']
+#labels = ['knife','refrigerator']
+colors = {'person':(0,0,0),'knife':(0,0,255)}
+#colors = {'knife':(0,0,255),'refrigerator':(0,0,255)}
 
 tfnet = TFNet(options)
 

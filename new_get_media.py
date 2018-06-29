@@ -210,7 +210,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     pool.close()
     pool.join()
     # Note we are using max statement here because its a one time only
-    et = db.get_stream_details_raw('max_time', stream_details_instance.id)
+    et = db.get_stream_details_raw('max_time', stream_details_instance.id)[0]
     stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
     stream_details_instance.end_time = et
     db.session.commit()

@@ -1,16 +1,14 @@
 import os,cv2
-
+from datetime import timedelta
 import multiprocessing
 import time
-from utils import save_file
 from AGdb.database import database
-from AGdb.create_tables import Stream_Details, Stream_Details_Raw
-
+from copy import deepcopy
 
 # global settings
 static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
 out_static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
-
+camera_id = '2'
 
 # s3_save settings
 no_of_processes = 1
@@ -24,12 +22,12 @@ TOTAL_ITERATIONS = 1100
 STREAM = False
 
 
-no_of_processes = 1
+no_of_processes = 2
 # put 2 to skip every other frame. 1 no skip
 skip_frames = 20
 
 
-def monitor(filename,manifest_name,segment_name,start_number):
+def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
     from Image_Recognize import draw_bound_box
     from ffmpeg_writer import FFMPEG_VideoWriter
     # program to monitor static folder for .mkv files as they are being written out
@@ -51,7 +49,9 @@ def monitor(filename,manifest_name,segment_name,start_number):
     start_time = time.time()
     last_video_time = 0
     x = 1  # displays the frame rate every 1 second
-
+    total_frame_counter = 0
+    group_id = 0
+    previous_frame_results =''
     raw_file = static_dir + filename.format(start_number)
     while True and True if STREAM  == True  else ( start_number <= TOTAL_ITERATIONS):
 
@@ -67,9 +67,15 @@ def monitor(filename,manifest_name,segment_name,start_number):
                 # until increment counter sets to next good file
                 if ret:
                     h, w, c = frame.shape
-                    ffmpegwriter = FFMPEG_VideoWriter(logfile, w, h, static_dir, manifest_name, segment_name, 30)
+                    ffmpegwriter = FFMPEG_VideoWriter(logfile, w, h, static_dir, manifest_name, segment_name, FPS)
                     capture.release()
                     i = 1
+                    db = database(camera_id)
+                    instance = db.get_stream_details_raw('rawfilename',filename.format(start_number))
+                    stream_details_raw_start_time = instance[0]
+                    stream_details_id = instance[1]
+                    db.session.close()
+                    Mypreprocobj = preprocessor_object(stream_details_raw_start_time,stream_details_id,FPS)
                 else:
                     print('-->dud fragment skipping')
 
@@ -80,13 +86,13 @@ def monitor(filename,manifest_name,segment_name,start_number):
             while (capture.isOpened()):
                 try:
                     ret, frame = capture.read()
-                    timer(capture)
                     counter += 1
                     if (time.time() - start_time) > x:
                         print("FPS: ", counter / (time.time() - start_time))
                         counter = 0
                         start_time = time.time()
                     if ret:
+
                         if skip_counter % skip_frames == 0 or skip_counter == 0:
                             # reprint = False
                             frame,last_frame_results = draw_bound_box(frame,'',False)
@@ -98,14 +104,33 @@ def monitor(filename,manifest_name,segment_name,start_number):
                         #TODO needs to assign all .TS files created in this call to the TS associated with the rawfile
                         skip_counter = skip_counter + 1
                         # TODO save meta data info
+                        if total_frame_counter % (5) == 0:
+                            #print(total_frame_counter)
+                            if last_frame_results != None and last_frame_results !='':
+                                if compare_labels(previous_frame_results,last_frame_results) == False:
+                                    group_id = group_id + 1
 
+                                pobj = Object()
+                                pobj.total_frame_counter = deepcopy(total_frame_counter)
+                                pobj.last_frame_results = deepcopy(last_frame_results)
+                                pobj.group_id = deepcopy(group_id)
+                                pobj.Mypreprocobj = Mypreprocobj
+                                #save_meta_data(pobj)
+                                pool.map(save_meta_data, (pobj,))
+                            else:
+                                if previous_frame_results != None and previous_frame_results != '':
+                                    group_id = group_id + 1
+
+                            previous_frame_results = last_frame_results
+                        total_frame_counter = total_frame_counter + 1
                     else:
                         capture.release()
                         cv2.destroyAllWindows()
                         break
                     #TODO save meta data
                     #print('saving HLS file to S3')
-                except:
+                except Exception as e:
+                    print(e)
                     print('-->dud fragment skipping')
 
             start_number = start_number + 1
@@ -127,6 +152,7 @@ def monitor(filename,manifest_name,segment_name,start_number):
     capture.release()
     cv2.destroyAllWindows()
     ffmpegwriter.close()
+    #TODO need to update best meta data in tables
     return
 
 def timer(cap):
@@ -138,45 +164,60 @@ def timer(cap):
     #print('time,',time, ',fps,',fps, ',tf,',total_frames,',index,',index)
     print('time in sec,', time/1000,  ',%,', index/total_frames)
 
+class Object(object):
+    pass
 
-def test():
 
-    # Create a VideoCapture object and read from input file
-    # If the input is the camera, pass 0 instead of the video file name
-    cap = cv2.VideoCapture('C:/Users/Jaison/PycharmProjects/Agimage/static/best_2_1000.m3u8')
+class preprocessor_object():
+    def __init__(self,time,stream_details_id,FPS):
+        # self.group_id = 1
+        # self.last_sec = 0
+        # self.last_sec_labels = ''
+        self.start_time = time
+        self.stream_details_id = stream_details_id
+        self.FPS = FPS
 
-    # Check if camera opened successfully
-    if (cap.isOpened() == False):
-        print("Error opening video stream or file")
 
-    # Read until video is completed
-    while (cap.isOpened()):
-        # Capture frame-by-frame
-        ret, frame = cap.read()
-        if ret == True:
 
-            # Display the resulting frame
-            #cv2.imshow('Frame', frame)
-            timer(cap)
-            # Press Q on keyboard to  exit
-            if cv2.waitKey(25) & 0xFF == ord('q'):
-                break
+def save_meta_data(pobj):
+    db = database(camera_id)
+    p_object = Object()
+    p_object.stream_details_id = pobj.Mypreprocobj.stream_details_id
+    p_object.frame_number = pobj.total_frame_counter
+    p_object.timestamp = pobj.Mypreprocobj.start_time + timedelta(seconds=pobj.total_frame_counter/pobj.Mypreprocobj.FPS)
+    p_object.seconds = pobj.total_frame_counter/pobj.Mypreprocobj.FPS
+    for row in pobj.last_frame_results:
+        p_object.label = row['label']
+        p_object.confidence = row['confidence']
+        p_object.position = {'topleft' : row['topleft'], 'bottomright' : row['bottomright']}
+        p_object.group_id = pobj.group_id
+        db.put_stream_metadata(p_object)
+    print('saved ', p_object.timestamp, ' by ', os.getpid())
+    db.session.close()
+    return
 
-        # Break the loop
-        else:
-            break
+def compare_labels(last_labels,current_labels):
+    # Note these two will not match!!!
+    #labels1 = ['clock', 'person']
+    #labels2 = ['clock', 'person', 'clock']
+    last_label_list = []
+    current_label_list = []
+    for rows in last_labels:
+        last_label_list.append(rows['label'])
+    for rows in current_labels:
+        current_label_list.append(rows['label'])
 
-    # When everything done, release the video capture object
-    cap.release()
+    if last_label_list == current_label_list:
+        return True
+    else:
+        return False
 
-    # Closes all the frames
-    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     print('Run save media first to warm up the GPUs and then only start stream and get_media')
     pool = multiprocessing.Pool(processes=no_of_processes)
 
-    camera_id = '2'
+
     db = database(camera_id)
 
     filename = 'test_' + str(camera_id) + '_rawfile{:08d}.mkv'
@@ -190,7 +231,7 @@ if __name__ == "__main__":
     #segment_name = 'best_200_'
     segment_name = 'best_'+ str(camera_id) +'_' + str(i) + '_'
     start_number = int(db.get_analytics_metaData_object('raw_file_prev_value').value)
-
+    FPS = 30
     # Test harness
-    #monitor(filename,manifest_name,segment_name,start_number)
-    test()
+    monitor(filename,manifest_name,segment_name,start_number,FPS,pool)
+    #test(FPS)

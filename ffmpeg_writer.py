@@ -21,6 +21,7 @@ class FFMPEG_VideoWriter:
         -an: no audio
         -s: set frame-size
         -framerate: set frame-rate.
+        -r: set FPS
         -c:v libx264: H264 encoder for H.264
         HLS commands
         -crf: Constant Rate Factor. Set to 10 is very good
@@ -74,6 +75,7 @@ class FFMPEG_VideoWriter:
                '-c:v','libx264',
                '-crf','30',
                '-g', '30',
+               # repeated twice for input and output FPS
                '-r','%d' %(self.r),
                '-maxrate','900k',
                '-b:v', '900k ',
