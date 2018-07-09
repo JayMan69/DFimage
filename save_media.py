@@ -13,6 +13,8 @@ camera_id = '2'
 no_of_processes = 1
 # put 2 to skip every other frame. 1 no skip
 skip_frames = 20
+# check to save every 5 frames
+save_frames = 5
 
 # monitor settings
 # set Stream = False for finite streaming. Setting STREAM = True will ignore TOTAL_ITERATIONS
@@ -57,7 +59,6 @@ def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
             if i == 0:
                 # do this only once for the entire session!
                 # This is to warm up ffmpeg with frame shape
-                #raw_file = static_dir + filename + '_rawfile' + str(start_number) + '.mkv'
                 raw_file = static_dir + filename.format(start_number)
                 capture = cv2.VideoCapture(raw_file)
                 ret, frame = capture.read()
@@ -100,14 +101,13 @@ def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
                         else:
                             # reprint = True
                             frame, last_frame_results  = draw_bound_box(frame, last_frame_results, True)
-                        # TODO uncomment the ffmpegwriter
+
                         ffmpegwriter.write_frame(frame)
-                        #TODO needs to assign all .TS files created in this call to the TS associated with the rawfile
                         skip_counter = skip_counter + 1
-                        # TODO save meta data info
-                        if total_frame_counter % (5) == 0:
-                            #print(total_frame_counter)
+                        if total_frame_counter % save_frames == 0:
+
                             if last_frame_results != None and last_frame_results !='':
+                                # write to metadata table only if there are results
                                 if compare_labels(previous_frame_results,last_frame_results) == False:
                                     group_id = group_id + 1
 
@@ -128,11 +128,10 @@ def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
                         capture.release()
                         cv2.destroyAllWindows()
                         break
-                    #TODO save meta data
-                    #print('saving HLS file to S3')
+
                 except Exception as e:
                     print(e)
-                    print('-->dud fragment skipping')
+                    #print('-->dud fragment skipping')
 
             start_number = start_number + 1
             raw_file = static_dir + filename.format(start_number)
@@ -264,11 +263,8 @@ if __name__ == "__main__":
     i = int(meta_data_instance.value)
 
     manifest_name = 'best_'+ str(camera_id) +'_' + str(i) + ''+ '.m3u8'
-    # segment_name = 'best_200_{:06d}.ts'
-    #segment_name = 'best_200_'
     segment_name = 'best_'+ str(camera_id) +'_' + str(i) + '_'
     start_number = int(db.get_analytics_metaData_object('raw_file_prev_value').value)
     FPS = 30
     # Test harness
     monitor(filename,manifest_name,segment_name,start_number,FPS,pool)
-    #test(FPS)

@@ -130,7 +130,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
         # Note this amount might not be exactly correct because the data is already compressed
     read_amt = h*w*3*1*1 #(h*w*no. of pixels*fps*1 seconds worth)
 
-    #TODO need i to be in db otherwise will continue to overwrite files
+
     meta_data_instance = db.get_analytics_metaData_object('raw_file_next_value')
     i = int(meta_data_instance.value)
     start_i = deepcopy(i)
@@ -185,7 +185,6 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
 
         if first_time == True:
             # print('first time is still on')
-            # TODO find if the first rawfile table has been inserted. If its inserted take that TS and update
             if start_i in  final_results:
                 stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
                 stream_details_instance.start_time = final_results[start_i][1]
@@ -203,7 +202,6 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
         if sys.getsizeof(datafeedstreamBody) < read_amt:
             print('Exiting with total bytes pulled =' , read_amt*i)
             #TODO need to sleep here if streaming - because program might be pulling faster than ingest
-            #TODO write excess out
             break
 
     print('Streaming done!')
@@ -331,5 +329,3 @@ if __name__ == "__main__":
     # output is
     #AWS_KINESISVIDEO_SERVER_TIMESTAMP: 1528483898.375
     #AWS_KINESISVIDEO_PRODUCER_TIMESTAMP: 1528483898.329
-    # will have to break into the smallest rawfiles based on a singular server_timestamp
-    # how to assign that to the correct TLS???
