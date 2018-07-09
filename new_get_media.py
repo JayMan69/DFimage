@@ -173,7 +173,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
                 #process_stream_efficiently(p_object)
                 results = pool.map(process_stream_efficiently, (p_objects))
                 if first_time == True:
-                    # append only for a few iterations
+                    # get the timestamp of the first file for saving later on
                     for a in results:
                         for key in a :
                             k1 = key
@@ -210,10 +210,12 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     pool.close()
     pool.join()
     # Note we are using max statement here because its a one time only
-    et = db.get_stream_details_raw('max_time', stream_details_instance.id)[0]
-    stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
-    stream_details_instance.end_time = et
-    db.session.commit()
+    db = database(camera_id)
+    et = db.get_stream_details_raw('max_time', p_temp_object.id)[0]
+    if et != None:
+        stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
+        stream_details_instance.end_time = et
+        db.session.commit()
 
 class Object(object):
     pass
@@ -304,8 +306,11 @@ if __name__ == "__main__":
     print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     pool = multiprocessing.Pool(processes=no_of_processes)
 
-    # Test harness 1
-    date = datetime.strptime('2018-06-1 9:02:02', '%Y-%m-%d %H:%M:%S')
+    ## Test harness 1
+    ## Time shown on KVS is UTC - 5
+    ## Time sent to KVS is UTC!
+    ## Time is not sensitive of upto 20s so if video ends at 49 you can get the video with a call of 55
+    date = datetime.strptime('2018-06-1 14:14:45', '%Y-%m-%d %H:%M:%S')
     get_kvs_stream(pool,'PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
 
     # Test harness 2

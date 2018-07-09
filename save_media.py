@@ -3,6 +3,7 @@ from datetime import timedelta
 import multiprocessing
 import time
 from AGdb.database import database
+from AGdb.create_tables import Stream_Details
 from copy import deepcopy
 
 # global settings
@@ -74,6 +75,9 @@ def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
                     instance = db.get_stream_details_raw('rawfilename',filename.format(start_number))
                     stream_details_raw_start_time = instance[0]
                     stream_details_id = instance[1]
+                    stream_details_instance = db.session.query(Stream_Details).get(stream_details_id)
+                    stream_details_instance.manifest_file_name = manifest_name
+                    db.session.commit()
                     db.session.close()
                     Mypreprocobj = preprocessor_object(stream_details_raw_start_time,stream_details_id,FPS)
                 else:
@@ -145,14 +149,26 @@ def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
                 print('-->Middle run. File not found. Waiting for 1 sec')
                 time.sleep(.1)
                 print('Done Sleeping')
-
+                if check_done_live(filename.format(start_number)) == True:
+                    break
 
 
     # need to close everything and save one last time
+    print('Saving done!')
+    pool.close()
+    pool.join()
+
     capture.release()
     cv2.destroyAllWindows()
     ffmpegwriter.close()
-    #TODO need to update best meta data in tables
+
+    instance = db.get_analytics_metaData_object('manifest_next_value')
+    instance.value = str(int(instance.value)+1)
+    db.session.commit()
+    instance = db.get_analytics_metaData_object('raw_file_prev_value')
+    instance.value = str(int(instance.value)+1)
+    db.session.commit()
+
     return
 
 def timer(cap):
@@ -163,6 +179,12 @@ def timer(cap):
 
     #print('time,',time, ',fps,',fps, ',tf,',total_frames,',index,',index)
     print('time in sec,', time/1000,  ',%,', index/total_frames)
+
+def check_done_live(last_file_name_processed):
+    # TODO check if there is an end time to the streaming details table
+    # If so, check what is the lastfilename in the Stream_Details_Raw table
+    # see if that has been processed
+    return False
 
 class Object(object):
     pass
