@@ -121,7 +121,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
             # new stream details instance
             stream_details_instance = Stream_Details()
             stream_details_instance.stream_id = stream_instance.id
-            stream_details_instance.live = 'False'
+            stream_details_instance.live = 'Process'
             stream_details_instance.resolution = str(w) + 'x' + str(h) + 'x3'
             stream_details_instance = db.put_stream_details(stream_details_instance)
         else:
@@ -215,7 +215,12 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     if et != None:
         stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
         stream_details_instance.end_time = et
+        stream_details_instance.live = 'False'
         db.session.commit()
+        instance = db.get_analytics_metaData_object('raw_file_next_value')
+        instance.value = str(i)
+        db.session.commit()
+
 
 class Object(object):
     pass
@@ -310,7 +315,7 @@ if __name__ == "__main__":
     ## Time shown on KVS is UTC - 5
     ## Time sent to KVS is UTC!
     ## Time is not sensitive of upto 20s so if video ends at 49 you can get the video with a call of 55
-    date = datetime.strptime('2018-06-1 14:14:45', '%Y-%m-%d %H:%M:%S')
+    date = datetime.strptime('2018-06-1 14:14:35', '%Y-%m-%d %H:%M:%S')
     get_kvs_stream(pool,'PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
 
     # Test harness 2

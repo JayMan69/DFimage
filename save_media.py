@@ -10,22 +10,19 @@ from copy import deepcopy
 static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
 out_static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
 camera_id = '2'
-
-# s3_save settings
 no_of_processes = 1
-DEFAULT_BUCKET = "kuvrr-analytics-test"
-DEFAULT_S3_Folder = '/static'
+# put 2 to skip every other frame. 1 no skip
+skip_frames = 20
 
 # monitor settings
 # set Stream = False for finite streaming. Setting STREAM = True will ignore TOTAL_ITERATIONS
 # Total_ITERATIONS is the number of files that will be written to S3
-TOTAL_ITERATIONS = 1100
+TOTAL_ITERATIONS = 2100
 STREAM = False
 
-
-no_of_processes = 2
-# put 2 to skip every other frame. 1 no skip
-skip_frames = 20
+# s3_save settings
+DEFAULT_BUCKET = "kuvrr-analytics-test"
+DEFAULT_S3_Folder = '/static'
 
 
 def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
@@ -146,29 +143,35 @@ def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
                 time.sleep(10)
                 print('Done Sleeping')
             else:
-                print('-->Middle run. File not found. Waiting for 1 sec')
+                print('-->Middle run. File not found. Waiting for .1 sec')
                 time.sleep(.1)
                 print('Done Sleeping')
-                if check_done_live(filename.format(start_number)) == True:
+                if check_done_live(stream_details_id,filename.format(start_number-1)) == True:
+                    #break out of the while loop
                     break
 
 
     # need to close everything and save one last time
-    print('Saving done!')
+
     pool.close()
     pool.join()
 
-    capture.release()
-    cv2.destroyAllWindows()
-    ffmpegwriter.close()
+    if i == 0:
+        print('Need to increase TOTAL_ITERATIONS value!!')
+    else:
 
-    instance = db.get_analytics_metaData_object('manifest_next_value')
-    instance.value = str(int(instance.value)+1)
-    db.session.commit()
-    instance = db.get_analytics_metaData_object('raw_file_prev_value')
-    instance.value = str(int(instance.value)+1)
-    db.session.commit()
+        capture.release()
+        cv2.destroyAllWindows()
+        ffmpegwriter.close()
 
+        db = database(camera_id)
+        instance = db.get_analytics_metaData_object('manifest_next_value')
+        instance.value = str(int(instance.value)+1)
+        db.session.commit()
+        instance = db.get_analytics_metaData_object('raw_file_prev_value')
+        instance.value = start_number
+        db.session.commit()
+        print('Saving done!')
     return
 
 def timer(cap):
@@ -180,11 +183,23 @@ def timer(cap):
     #print('time,',time, ',fps,',fps, ',tf,',total_frames,',index,',index)
     print('time in sec,', time/1000,  ',%,', index/total_frames)
 
-def check_done_live(last_file_name_processed):
-    # TODO check if there is an end time to the streaming details table
-    # If so, check what is the lastfilename in the Stream_Details_Raw table
-    # see if that has been processed
-    return False
+def check_done_live(stream_details_id,last_file_name_processed):
+    db = database(camera_id)
+    stream_details_instance = db.session.query(Stream_Details).get(stream_details_id)
+    if stream_details_instance.live == False or stream_details_instance.live == 'False':
+        # If False then done. Otherwise can be True or Process
+        rawf = db.get_stream_details_raw('max_rawfilename',stream_details_id)
+        if rawf[0] == last_file_name_processed:
+            print('End of feed')
+            db.session.close()
+            return True
+        else:
+            db.session.close()
+            return False
+    else:
+        # process still running
+        db.session.close()
+        return False
 
 class Object(object):
     pass
