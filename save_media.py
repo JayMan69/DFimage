@@ -7,8 +7,8 @@ from AGdb.create_tables import Stream_Details
 from copy import deepcopy
 
 # global settings
-static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
-out_static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
+static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/static/')
+out_static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/static/')
 camera_id = '2'
 no_of_processes = 1
 # put 2 to skip every other frame. 1 no skip

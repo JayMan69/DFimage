@@ -53,7 +53,7 @@ total_run_count = 100
 # TODO need to read continuation_token from DB
 continuation_token = '91343852333181486911561392739977168453738419308'
 
-static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/')
+static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/static/')
 
 def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     # get camera id given arn name
