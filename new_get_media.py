@@ -48,6 +48,8 @@ session = boto3.Session(profile_name='agimage1')
 w = 1280
 h = 720
 camera_id = '2'
+# set total_run_count to -1 for infinite loop
+total_run_count = 100
 # TODO need to read continuation_token from DB
 continuation_token = '91343852333181486911561392739977168453738419308'
 
@@ -148,6 +150,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     final_results = {}
     while True:
 
+
         datafeedstreamBody = stream['Payload'].read(amt=read_amt)
         fullstream = excess_buffer + datafeedstreamBody
         index = 0
@@ -204,6 +207,10 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
             #TODO need to sleep here if streaming - because program might be pulling faster than ingest
             break
 
+        if total_run_count != - 1 and i > total_run_count:
+            print('Exiting with count exceeding total_run_count ')
+            break
+
     print('Streaming done!')
     pool.close()
     pool.join()
@@ -211,6 +218,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     db = database(camera_id)
     et = db.get_stream_details_raw('max_time', p_temp_object.id)[0]
     if et != None:
+        print('Updating Meta Data tables!')
         stream_details_instance = db.session.query(Stream_Details).get(p_temp_object.id)
         stream_details_instance.end_time = et
         stream_details_instance.live = 'False'
@@ -306,16 +314,20 @@ if __name__ == "__main__":
     print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     print('!!!!Remember to put the correct H W or program will crash!!!!!')
     print('!!!!Running with ',w,h)
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    if total_run_count != -1:
+        print('!!!!Running for ', total_run_count , ' iterations')
+
     pool = multiprocessing.Pool(processes=no_of_processes)
 
     ## Test harness 1
     ## Time shown on KVS is UTC - 5
     ## Time sent to KVS is UTC!
     ## Time is not sensitive of upto 20s so if video ends at 49 you can get the video with a call of 55
-    date = datetime.strptime('2018-06-1 14:14:35', '%Y-%m-%d %H:%M:%S')
+    ## 14:14:35
+    date = datetime.strptime('2018-06-1 14:01:35', '%Y-%m-%d %H:%M:%S')
     get_kvs_stream(pool,'PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
-
+    print('!!!!Running PRODUCER_TIMESTAMP ', date)
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     # Test harness 2
     #get_kvs_stream(pool,'EARLIEST',DEFAULT_ARN,'')
 
@@ -324,6 +336,9 @@ if __name__ == "__main__":
 
     # Test live stream
     #get_kvs_stream(pool,'NOW',DEFAULT_ARN,'')
+    #print('!!!!Running Live Stream ')
+    #print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
 
     # os.system('ffplay -i test_rawfile00000150.mkv -vf "cropdetect=24:160:0"')
     # output is
