@@ -228,7 +228,7 @@ def save_meta_data(pobj):
         p_object.position = {'topleft' : row['topleft'], 'bottomright' : row['bottomright']}
         p_object.group_id = pobj.group_id
         db.put_stream_metadata(p_object)
-    print('saved ', p_object.timestamp, ' by ', os.getpid())
+    #print('saved ', p_object.timestamp, ' by ', os.getpid())
     db.session.close()
     return
 

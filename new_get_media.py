@@ -41,15 +41,17 @@ p_t_e_len = len(p_t) + len(p_t_s)
 
 
 #oregon / us-west-2
-DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1527325436792'
-#DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/demo-stream/1526732311448'
+#camera_id = '2'
+#DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/analytics-test-1/1527325436792'
+camera_id = '1'
+DEFAULT_ARN = 'arn:aws:kinesisvideo:us-west-2:519480889604:stream/demo-stream/1526732311448'
 # kvs is written to us-west-2
 session = boto3.Session(profile_name='agimage1')
-w = 1280
-h = 720
-camera_id = '2'
+w = 640
+h = 480
+
 # set total_run_count to -1 for infinite loop
-total_run_count = 100
+total_run_count = -1
 # TODO need to read continuation_token from DB
 continuation_token = '91343852333181486911561392739977168453738419308'
 
@@ -109,10 +111,11 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
             StreamARN=DEFAULT_ARN,
             StartSelector={'StartSelectorType': 'NOW'}
         )
-        stream_details_instance = Object()
+        stream_details_instance = Stream_Details()
         stream_details_instance.stream_id = stream_instance.id
-        stream_details_instance.live = True
+        stream_details_instance.live = 'True'
         stream_details_instance.resolution = str(w) + 'x' + str(h) + 'x3'
+        stream_details_instance = db.put_stream_details(stream_details_instance)
     else:
         # old stream. Check if stream details record exists or not
         p_object = Object()
@@ -324,10 +327,10 @@ if __name__ == "__main__":
     ## Time sent to KVS is UTC!
     ## Time is not sensitive of upto 20s so if video ends at 49 you can get the video with a call of 55
     ## 14:14:35
-    date = datetime.strptime('2018-06-1 14:01:35', '%Y-%m-%d %H:%M:%S')
-    get_kvs_stream(pool,'PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
-    print('!!!!Running PRODUCER_TIMESTAMP ', date)
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    # date = datetime.strptime('2018-06-1 14:01:35', '%Y-%m-%d %H:%M:%S')
+    # get_kvs_stream(pool,'PRODUCER_TIMESTAMP',DEFAULT_ARN,date)
+    # print('!!!!Running PRODUCER_TIMESTAMP ', date)
+    # print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     # Test harness 2
     #get_kvs_stream(pool,'EARLIEST',DEFAULT_ARN,'')
 
@@ -335,9 +338,9 @@ if __name__ == "__main__":
     #get_kvs_stream(pool,'',DEFAULT_ARN,'')
 
     # Test live stream
-    #get_kvs_stream(pool,'NOW',DEFAULT_ARN,'')
-    #print('!!!!Running Live Stream ')
-    #print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    get_kvs_stream(pool,'NOW',DEFAULT_ARN,'')
+    print('!!!!Running Live Stream ')
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
 
     # os.system('ffplay -i test_rawfile00000150.mkv -vf "cropdetect=24:160:0"')
