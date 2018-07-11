@@ -9,7 +9,7 @@ from copy import deepcopy
 # global settings
 static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/static/')
 out_static_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static/static/')
-camera_id = '2'
+camera_id = '1'
 no_of_processes = 1
 # put 2 to skip every other frame. 1 no skip
 skip_frames = 20
