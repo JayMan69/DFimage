@@ -76,7 +76,7 @@ def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
                     stream_details_instance = db.session.query(Stream_Details).get(stream_details_id)
                     stream_details_instance.manifest_file_name = manifest_name
                     db.session.commit()
-                    db.session.close()
+                    db.close()
                     Mypreprocobj = preprocessor_object(stream_details_raw_start_time,stream_details_id,FPS)
                 else:
                     print('-->dud fragment skipping')
@@ -170,6 +170,7 @@ def monitor(filename,manifest_name,segment_name,start_number,FPS,pool):
         instance = db.get_analytics_metaData_object('raw_file_prev_value')
         instance.value = start_number
         db.session.commit()
+        db.close()
         print('Saving done!')
     return
 
@@ -184,21 +185,21 @@ def timer(cap):
 
 def check_done_live(stream_details_id,last_file_name_processed):
     db = database(camera_id)
+    status = False
     stream_details_instance = db.session.query(Stream_Details).get(stream_details_id)
     if stream_details_instance.live == False or stream_details_instance.live == 'False':
         # If False then done. Otherwise can be True or Process
         rawf = db.get_stream_details_raw('max_rawfilename',stream_details_id)
         if rawf[0] == last_file_name_processed:
             print('End of feed')
-            db.session.close()
-            return True
+            status = True
         else:
-            db.session.close()
-            return False
+            status = False
     else:
         # process still running
-        db.session.close()
-        return False
+        status = False
+    db.close()
+    return status
 
 class Object(object):
     pass
@@ -229,7 +230,7 @@ def save_meta_data(pobj):
         p_object.group_id = pobj.group_id
         db.put_stream_metadata(p_object)
     #print('saved ', p_object.timestamp, ' by ', os.getpid())
-    db.session.close()
+    db.close()
     return
 
 def compare_labels(last_labels,current_labels):

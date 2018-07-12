@@ -148,7 +148,9 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
     first_time = True
     p_temp_object = Object()
     p_temp_object.id = stream_details_instance.id
+    # required to save the stream details updates above
     db.session.close()
+
     results = {}
     final_results = {}
     while True:
@@ -196,7 +198,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
                 stream_details_instance.start_time = final_results[start_i][1]
                 db.session.commit()
                 first_time = False
-            db.session.close()
+            db.close()
         counter += 1
         if (time.time() - start_time) > onesecond:
             #print('Last token found', last_c_token)
@@ -229,7 +231,7 @@ def get_kvs_stream(pool,selType , arn = DEFAULT_ARN, date='' ):
         instance = db.get_analytics_metaData_object('raw_file_next_value')
         instance.value = str(i)
         db.session.commit()
-
+        db.close()
 
 class Object(object):
     pass
@@ -295,7 +297,7 @@ def save_raw(p_object):
         p1_object.producer_time = pstart_time
         row = db.put_stream_details_raw(p1_object)
         retval = row.id
-        db.session.close()
+        db.close()
         return retval
         #print('finished Stream_Details_Raw', os.getpid(), start_time, rawfile)
 
